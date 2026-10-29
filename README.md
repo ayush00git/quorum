@@ -1,6 +1,6 @@
-# Quorum
+![Quorum: an AI that tries to break your distributed system](docs/screenshots/banner.jpg)
 
-An AI that tries to break your distributed system.
+# Quorum
 
 Quorum is a Jepsen-style lab where Claude plays the adversary. It attacks a simulated five-node Raft key-value store with partitions, crashes, pauses and network faults. A real linearizability checker decides whether it won. Some targets have a planted consistency bug and one is correct, and Claude doesn't know which is which.
 
