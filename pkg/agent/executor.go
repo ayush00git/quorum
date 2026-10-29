@@ -113,7 +113,7 @@ func (x *executor) runExperiment(input json.RawMessage) (string, error) {
 		return "", err
 	}
 	x.experiments = append(x.experiments, summarize(r, ""))
-	return fmt.Sprintf("experiment %s\n%s", r.ID, x.engine.Summarize(r)), nil
+	return x.engine.Summarize(r), nil
 }
 
 func (x *executor) shrink(input json.RawMessage) (string, error) {

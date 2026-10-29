@@ -85,14 +85,14 @@ func (f *FakeEngine) Run(s experiment.Spec) (experiment.Result, error) {
 	}
 	r.Check.Verdict = checker.VerdictOK
 	if Violates(s) {
-		r.Check = checker.CheckResult{Verdict: checker.VerdictViolation, Key: "x", OffendingIDs: []int{3, 4}, Explanation: "stale read"}
+		r.Check = checker.CheckResult{Verdict: checker.VerdictViolation, Key: "x", IllegalIDs: []int{3}, OffendingIDs: []int{3, 4}, Explanation: "stale read"}
 	}
 	return r, nil
 }
 
 // Summarize implements agent.Engine.
 func (f *FakeEngine) Summarize(r experiment.Result) string {
-	return fmt.Sprintf("verdict: %s, ops: %d", r.Check.Verdict, len(r.History))
+	return fmt.Sprintf("experiment %s: verdict %s, ops %d", r.ID, r.Check.Verdict, len(r.History))
 }
 
 // Shrink implements agent.Engine.

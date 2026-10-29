@@ -5,11 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strconv"
 	"strings"
 
+	"github.com/ayush00git/quorum/pkg/checker"
 	"github.com/ayush00git/quorum/pkg/experiment"
-	"github.com/ayush00git/quorum/pkg/sim"
 	"github.com/ayush00git/quorum/pkg/workload"
 )
 
@@ -78,7 +77,7 @@ func (x *executor) inspectHistory(input json.RawMessage) (string, error) {
 		}
 		matched++
 		if len(lines) < limit {
-			lines = append(lines, opLine(op, slices.Contains(r.Check.OffendingIDs, op.ID)))
+			lines = append(lines, opLine(op, r.Check))
 		}
 	}
 	return renderLines(fmt.Sprintf("experiment %s ops", r.ID), lines, matched, "narrow with key, fromMs or toMs"), nil
@@ -111,7 +110,7 @@ func (x *executor) inspectEvents(input json.RawMessage) (string, error) {
 		}
 		matched++
 		if len(lines) < limit {
-			lines = append(lines, eventLine(ev))
+			lines = append(lines, experiment.FormatEvent(ev))
 		}
 	}
 	return renderLines(fmt.Sprintf("experiment %s events", r.ID), lines, matched, "narrow with node, fromMs or toMs"), nil
@@ -130,55 +129,17 @@ func renderLines(title string, lines []string, matched int, hint string) string 
 	return b.String()
 }
 
-func intStr(v *int) string {
-	if v == nil {
-		return "nil"
-	}
-	return strconv.Itoa(*v)
-}
-
-// opLabel renders an op like w(x,3), r(x)->2 or cas(x,1->2).
-func opLabel(op workload.Op) string {
-	switch op.Kind {
-	case workload.KindWrite:
-		return fmt.Sprintf("w(%s,%s)", op.Key, intStr(op.Value))
-	case workload.KindRead:
-		if op.Status == workload.StatusOK {
-			return fmt.Sprintf("r(%s)->%s", op.Key, intStr(op.Result))
-		}
-		return fmt.Sprintf("r(%s)", op.Key)
-	case workload.KindCas:
-		return fmt.Sprintf("cas(%s,%s->%s)", op.Key, intStr(op.Expected), intStr(op.Value))
-	default:
-		return fmt.Sprintf("%s(%s)", op.Kind, op.Key)
-	}
-}
-
-func opLine(op workload.Op, offending bool) string {
+// opLine marks ops the checker flagged: '*' cannot be linearized, '!'
+// conflicts with one that cannot.
+func opLine(op workload.Op, c checker.CheckResult) string {
 	mark := " "
-	if offending {
+	switch {
+	case slices.Contains(c.IllegalIDs, op.ID):
+		mark = "*"
+	case slices.Contains(c.OffendingIDs, op.ID):
 		mark = "!"
 	}
-	done := "?"
-	if op.CompleteAt != nil {
-		done = strconv.FormatInt(*op.CompleteAt, 10)
-	}
-	return fmt.Sprintf("%s#%d p%d %s %s [%d-%s] %s", mark, op.ID, op.Process, opLabel(op), op.Status, op.InvokeAt, done, op.Node)
-}
-
-func eventLine(ev sim.Event) string {
-	node := ev.Node
-	if node == "" {
-		node = "-"
-	}
-	line := fmt.Sprintf("%dms %s %s", ev.AtMs, node, ev.Kind)
-	if ev.Term != 0 {
-		line += fmt.Sprintf(" term=%d", ev.Term)
-	}
-	if ev.Detail != "" {
-		line += " " + ev.Detail
-	}
-	return line
+	return mark + " " + experiment.FormatOp(op)
 }
 
 func nodeIDs(engine Engine, target string) []string {
@@ -186,9 +147,5 @@ func nodeIDs(engine Engine, target string) []string {
 	if n <= 0 {
 		n = experiment.NodeCount
 	}
-	ids := make([]string, n)
-	for i := range ids {
-		ids[i] = fmt.Sprintf("n%d", i+1)
-	}
-	return ids
+	return experiment.NodeIDs(n)
 }

@@ -103,7 +103,7 @@ func Tools() []Tool {
 		},
 		{
 			Name:        ToolInspectHistory,
-			Description: "List client operations of an experiment, one line per op (max 60 lines): id, process, op, status, invoke and complete times, node. Ops the checker flagged are marked with '!'.",
+			Description: "List client operations of an experiment, one line per op (max 60 lines): id, process, op, status, invoke and complete times, node. Ops the checker flagged are marked: '*' cannot be linearized, '!' conflicts with one that cannot.",
 			Properties:  withProps(rangeProps, map[string]any{"key": strProp("Only include ops on this key.")}),
 			Required:    []string{"experimentId"},
 		},

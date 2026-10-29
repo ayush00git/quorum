@@ -12,7 +12,7 @@ var faultDocs = []struct{ action, args, effect string }{
 	{experiment.ActionPartition, `{"groups":[["n1","n2"],["n3","n4","n5"]]}`, "split the network into groups; messages between groups are dropped, including in-flight ones"},
 	{experiment.ActionIsolate, `{"node":"n1"}`, "cut one node off from all others"},
 	{experiment.ActionHeal, `{}`, "remove every partition"},
-	{experiment.ActionCrash, `{"node":"n1"}`, "crash a node: volatile state is lost, its disk (term, vote, log) survives"},
+	{experiment.ActionCrash, `{"node":"n1"}`, "crash a node: volatile state is lost, whatever it persisted to disk survives"},
 	{experiment.ActionRestart, `{"node":"n1"}`, "restart a crashed node from its disk"},
 	{experiment.ActionPause, `{"node":"n1","durationMs":400}`, "freeze a node (GC-style): it processes nothing, messages queue and timers fire late, then it resumes"},
 	{experiment.ActionSetNetwork, `{"minLatencyMs":1,"maxLatencyMs":80,"dropRate":0.1,"duplicateRate":0.05}`, "change the network model from this time on; every field is optional"},
