@@ -27,7 +27,8 @@ type keyHistory struct {
 
 // Check verifies a history for linearizability, one key at a time in sorted
 // key order. fail ops are excluded; info writes may take effect any time
-// after invocation, or never; info reads constrain nothing and are dropped.
+// after invocation, or never; info reads constrain nothing and are dropped,
+// as are info writes whose value nobody observed.
 // If checking exceeds timeout the verdict is unknown.
 func Check(history []workload.Op, timeout time.Duration) CheckResult {
 	deadline := time.Now().Add(timeout)
@@ -62,9 +63,34 @@ func splitByKey(history []workload.Op) []keyHistory {
 	}
 	never := end + 1_000_000_000
 
+	// Values some completed op observed, per key. Values are unique per key,
+	// so an indeterminate write nobody observed can be dropped: "it never
+	// happened" is one of its allowed outcomes, and wherever else it could be
+	// linearized it is overwritten before any read, so it changes nothing.
+	// Dropping it keeps the search small when many writes time out.
+	observed := map[string]map[int]bool{}
+	see := func(key string, v *int) {
+		if v == nil {
+			return
+		}
+		if observed[key] == nil {
+			observed[key] = map[int]bool{}
+		}
+		observed[key][*v] = true
+	}
+	for _, op := range history {
+		if op.Status == workload.StatusOK {
+			see(op.Key, op.Result)
+			see(op.Key, op.Expected)
+		}
+	}
+
 	byKey := map[string]*keyHistory{}
 	for _, op := range history {
 		if op.Status == workload.StatusFail || (op.Status == workload.StatusInfo && op.Kind == workload.KindRead) {
+			continue
+		}
+		if op.Status == workload.StatusInfo && op.Value != nil && !observed[op.Key][*op.Value] {
 			continue
 		}
 		kh := byKey[op.Key]
