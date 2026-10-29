@@ -1,0 +1,22 @@
+# env
+.env
+.env.*
+!.env.example
+
+# node / next
+node_modules/
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+coverage/
+
+# go
+/bin/
+
+# local worktrees for parallel builds
+.worktrees/
+
+# os / editor
+.DS_Store
+*.swp
