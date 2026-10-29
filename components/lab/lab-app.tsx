@@ -78,6 +78,7 @@ export function LabApp() {
             void start({
               target: resolved.target,
               maxSteps: resolved.maxSteps,
+              seed: resolved.seed,
               accessCode: resolved.accessCode || undefined,
             });
           }}

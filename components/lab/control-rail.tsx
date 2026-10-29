@@ -98,7 +98,7 @@ export function ControlRail({
             )}
           </select>
         </Field>
-        <Field label="Seed" htmlFor="seed" hint="Names the exported run file.">
+        <Field label="Seed" htmlFor="seed" hint="Base seed suggested to Claude for its experiments. Also names the exported run.">
           <div className="flex gap-1.5">
             <input
               id="seed"

@@ -31,6 +31,7 @@ export interface RunState {
 export interface StartOptions {
   target: string;
   maxSteps: number;
+  seed?: number;
   accessCode?: string;
 }
 
@@ -101,7 +102,7 @@ export function useAgentRun() {
 
   useEffect(() => () => controller.current?.abort(), []);
 
-  const start = useCallback(async ({ target, maxSteps, accessCode }: StartOptions) => {
+  const start = useCallback(async ({ target, maxSteps, seed, accessCode }: StartOptions) => {
     controller.current?.abort();
     const ac = new AbortController();
     controller.current = ac;
@@ -120,7 +121,7 @@ export function useAgentRun() {
         let res;
         for (;;) {
           try {
-            res = await agentStep({ target, maxSteps, messages, accessCode }, ac.signal);
+            res = await agentStep({ target, maxSteps, seed, messages, accessCode }, ac.signal);
             break;
           } catch (err) {
             if (!(err instanceof ApiError) || !err.retryable || attempt >= BACKOFF_MS.length) {
