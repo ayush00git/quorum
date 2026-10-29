@@ -1,0 +1,3641 @@
+{
+  "version": 1,
+  "target": "target-a",
+  "model": "claude-sonnet-5-5",
+  "startedAt": "2026-10-29T11:24:08Z",
+  "steps": [
+    {
+      "assistant": [
+        {
+          "type": "tool_use",
+          "id": "toolu_01KNY4oVWTaywdQ3QSwoa6F6",
+          "name": "cluster_info",
+          "input": {},
+          "caller": {
+            "type": "direct"
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "content": "target: target-a\nnodes: n1 n2 n3 n4 n5\ndefault spec: {\"seed\":0,\"target\":\"target-a\",\"durationMs\":3000,\"nodes\":5,\"clients\":4,\"keys\":2,\"readRatio\":0.5,\"readFrom\":\"leader\",\"opTimeoutMs\":500,\"network\":{\"minLatencyMs\":1,\"maxLatencyMs\":10,\"dropRate\":0,\"duplicateRate\":0},\"faults\":[]}\nlimits: durationMs \u003c= 10000, faults \u003c= 30, inspect output \u003c= 60 lines\nfault actions (faults: [{atMs, action, args}]):\n  partition {\"groups\":[[\"n1\",\"n2\"],[\"n3\",\"n4\",\"n5\"]]}: split the network into groups; messages between groups are dropped, including in-flight ones\n  isolate {\"node\":\"n1\"}: cut one node off from all others\n  heal {}: remove every partition\n  crash {\"node\":\"n1\"}: crash a node: volatile state is lost, whatever it persisted to disk survives\n  restart {\"node\":\"n1\"}: restart a crashed node from its disk\n  pause {\"node\":\"n1\",\"durationMs\":400}: freeze a node (GC-style): it processes nothing, messages queue and timers fire late, then it resumes\n  setNetwork {\"minLatencyMs\":1,\"maxLatencyMs\":80,\"dropRate\":0.1,\"duplicateRate\":0.05}: change the network model from this time on; every field is optional\nworkload: each client process has at most one outstanding op; ops are reads and writes on keys x, y, z, ...; write values are unique per key. Clients follow leader hints and retry. An op that times out is indeterminate (status info) and its process retires; status fail means the op definitely did not take effect.\nchecker: per-key linearizability of the recorded history; verdict ok, violation or unknown (checker timeout).\n\nbudget: {\"stepsUsed\":1,\"stepsLeft\":29}",
+          "tool_use_id": "toolu_01KNY4oVWTaywdQ3QSwoa6F6",
+          "type": "tool_result"
+        }
+      ],
+      "experiments": []
+    },
+    {
+      "assistant": [
+        {
+          "type": "text",
+          "text": "Hypothesis: isolate the leader mid-run; stale leader may serve reads."
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_01NidLkuayV7Xf6bsZmGPmPi",
+          "name": "run_experiment",
+          "input": {
+            "spec": {
+              "seed": 42,
+              "faults": [
+                {
+                  "atMs": 800,
+                  "action": "isolate",
+                  "args": {
+                    "node": "n1"
+                  }
+                },
+                {
+                  "atMs": 2200,
+                  "action": "heal",
+                  "args": {}
+                }
+              ]
+            }
+          },
+          "caller": {
+            "type": "direct"
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "content": "experiment c7c3487d: target-a, seed 42, 3000 ms, 4 clients, 2 keys, reads 50% from leader, op timeout 500 ms\nnetwork: latency 1-10 ms, drop 0, duplicate 0\nfaults (2): 800 isolate n1; 2200 heal\nverdict: ok (linearizable)\nops: 431 (ok 412, fail 17, info 2; reads 208, writes 223); messages 6058 sent, 277 dropped\nleaders: t1 n4 201-2207; t9 n5 2378-3000\nevents: 9 elections started, 8 votes granted\n  194 n4 election-started t1\n  201 n4 became-leader t1 (log 0, commit 0)\n  800 partition (n1 | n2,n3,n4,n5)\n  950 n1 election-started t2\n  1148 n1 election-started t3\n  1432 n1 election-started t4\n  1715 n1 election-started t5\n  1887 n1 election-started t6\n  2083 n1 election-started t7\n  2200 heal\n  2207 n4 stepped-down t7\n  2272 n1 election-started t8\n  2371 n5 election-started t9\n  2378 n5 became-leader t9 (log 316, commit 315)\n\n\nbudget: {\"stepsUsed\":2,\"stepsLeft\":28}",
+          "tool_use_id": "toolu_01NidLkuayV7Xf6bsZmGPmPi",
+          "type": "tool_result"
+        }
+      ],
+      "experiments": [
+        {
+          "id": "c7c3487d",
+          "spec": {
+            "seed": 42,
+            "target": "target-a",
+            "durationMs": 3000,
+            "nodes": 5,
+            "clients": 4,
+            "keys": 2,
+            "readRatio": 0.5,
+            "readFrom": "leader",
+            "opTimeoutMs": 500,
+            "network": {
+              "minLatencyMs": 1,
+              "maxLatencyMs": 10,
+              "dropRate": 0,
+              "duplicateRate": 0
+            },
+            "faults": [
+              {
+                "atMs": 800,
+                "action": "isolate",
+                "args": {
+                  "node": "n1"
+                }
+              },
+              {
+                "atMs": 2200,
+                "action": "heal",
+                "args": {}
+              }
+            ]
+          },
+          "verdict": "ok",
+          "ops": 431,
+          "faults": 2,
+          "durationMs": 3000,
+          "shrunkFrom": ""
+        }
+      ]
+    },
+    {
+      "assistant": [
+        {
+          "type": "text",
+          "text": "Leader was n4; isolate n4 instead, reads from any."
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_01EbgiNohicYE1FnYDzgqaeN",
+          "name": "run_experiment",
+          "input": {
+            "spec": {
+              "seed": 42,
+              "readFrom": "any",
+              "faults": [
+                {
+                  "atMs": 800,
+                  "action": "isolate",
+                  "args": {
+                    "node": "n4"
+                  }
+                },
+                {
+                  "atMs": 2200,
+                  "action": "heal",
+                  "args": {}
+                }
+              ]
+            }
+          },
+          "caller": {
+            "type": "direct"
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "content": "experiment 7cfd5858: target-a, seed 42, 3000 ms, 4 clients, 2 keys, reads 50% from any, op timeout 500 ms\nnetwork: latency 1-10 ms, drop 0, duplicate 0\nfaults (2): 800 isolate n4; 2200 heal\nverdict: ok (linearizable)\nops: 260 (ok 239, fail 10, info 11; reads 118, writes 142); messages 3999 sent, 235 dropped\nleaders: t1 n4 206-2216; t2 n5 1036-3000\nevents: 2 elections started, 7 votes granted\n  194 n4 election-started t1\n  206 n4 became-leader t1 (log 0, commit 0)\n  800 partition (n4 | n1,n2,n3,n5)\n  1027 n5 election-started t2\n  1036 n5 became-leader t2 (log 82, commit 82)\n  2200 heal\n  2216 n4 stepped-down t2\n\n\nbudget: {\"stepsUsed\":3,\"stepsLeft\":27}",
+          "tool_use_id": "toolu_01EbgiNohicYE1FnYDzgqaeN",
+          "type": "tool_result"
+        }
+      ],
+      "experiments": [
+        {
+          "id": "7cfd5858",
+          "spec": {
+            "seed": 42,
+            "target": "target-a",
+            "durationMs": 3000,
+            "nodes": 5,
+            "clients": 4,
+            "keys": 2,
+            "readRatio": 0.5,
+            "readFrom": "any",
+            "opTimeoutMs": 500,
+            "network": {
+              "minLatencyMs": 1,
+              "maxLatencyMs": 10,
+              "dropRate": 0,
+              "duplicateRate": 0
+            },
+            "faults": [
+              {
+                "atMs": 800,
+                "action": "isolate",
+                "args": {
+                  "node": "n4"
+                }
+              },
+              {
+                "atMs": 2200,
+                "action": "heal",
+                "args": {}
+              }
+            ]
+          },
+          "verdict": "ok",
+          "ops": 260,
+          "faults": 2,
+          "durationMs": 3000,
+          "shrunkFrom": ""
+        }
+      ]
+    },
+    {
+      "assistant": [
+        {
+          "type": "thinking",
+          "thinking": "",
+          "signature": "CAQSuwUKEAgTGAI4AUIIdGhpbmtpbmcSDPeW79QEe1NvJWQ1RhoMOsMAgVqxDJ036l8aIjDSv4LIpSZBjgOuqLii3vAXFsFeBunOYKYHRNXS1OkN2hqkTbqRLsE4E/aHHQlAHxsq2ARv4ONCJXznFGFQuLqnNOuax1vfWyDP8lwhJ+hsFq46+EtYj607zvzutEX8z5PqHq84orz41y9+EcmQqLV30/jmMjIRppDWyRd2jAdg4o6zLfRos+G0OZoFt/A1RnMEU2iLt+9PFNveq/zo+odyQPDjplXupyULShuVggTPIhKU0S5MMjKSNsoCD3dQ2pro3jjoD88Qw3+UvuTZCtRP7gpv/mWocoVOK+YTfPRBAUB+cBA82PMrQvwW3dd18aeGPFbbfFWiJDqEhZTIPTpYucxIklMQTBYtPDxr63coDyT50yHOF+NItZIUrC/ADSXMGy/WfWj0+X7LnDn9NKdWLpi6ke5Vf0EgKO4vt2UWkuPFLnHjsCJKbGVWp8ZYPOa6XllMO/yNZDdDoiDP1ZRxjK6TiKyBQWiHIp/QXn+m3jOqPnqTqg92YBR17V6HdiG/tkqq44BWZ9vLlUxG4Cc7aBk5mfICoa4ngQms/b0kdgZ27B1CzLv/cIkx/5hC2Ym/SFaiz+HctOYP39oB1IlcVNBBR2nlUyu+WoUlxAwdnz1+/aKRwFwOljrbnMNg7hGDzD4WRcLxZEAFKcpwGUUkVnf0pOIM1ZCRMldoxmpbISLcTZD9nMkctTXehPrdjDgLkNXkxzMveYBXm5m2uoMi3sKRpEEDuRdpuEoiLBd3E75svdYs6I38ESttw5KGOpkZhuNs2Vu1d61+s43LHm5SKceBz2HQdmYa5LeL7Y+/Rb1WGtc0hqL4na/wwwgK7GHiV8oZUHGVFroAvHYJpY2M7QsCQ8MADH8byysYAQ=="
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_015REEJP3cDDJS2uMKM6MeJY",
+          "name": "run_experiment",
+          "input": {
+            "spec": {
+              "seed": 42,
+              "faults": [
+                {
+                  "atMs": 800,
+                  "action": "isolate",
+                  "args": {
+                    "node": "n4"
+                  }
+                },
+                {
+                  "atMs": 2200,
+                  "action": "heal",
+                  "args": {}
+                }
+              ]
+            }
+          },
+          "caller": {
+            "type": "direct"
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "content": "experiment 3bb7af9c: target-a, seed 42, 3000 ms, 4 clients, 2 keys, reads 50% from leader, op timeout 500 ms\nnetwork: latency 1-10 ms, drop 0, duplicate 0\nfaults (2): 800 isolate n4; 2200 heal\nverdict: ok (linearizable)\nops: 374 (ok 358, fail 9, info 7; reads 190, writes 184); messages 5504 sent, 299 dropped\nleaders: t1 n4 201-2207; t2 n1 968-3000\nevents: 2 elections started, 6 votes granted\n  194 n4 election-started t1\n  201 n4 became-leader t1 (log 0, commit 0)\n  800 partition (n4 | n1,n2,n3,n5)\n  950 n1 election-started t2\n  968 n1 became-leader t2 (log 91, commit 90)\n  2200 heal\n  2207 n4 stepped-down t2\n\n\nbudget: {\"stepsUsed\":4,\"stepsLeft\":26}",
+          "tool_use_id": "toolu_015REEJP3cDDJS2uMKM6MeJY",
+          "type": "tool_result"
+        }
+      ],
+      "experiments": [
+        {
+          "id": "3bb7af9c",
+          "spec": {
+            "seed": 42,
+            "target": "target-a",
+            "durationMs": 3000,
+            "nodes": 5,
+            "clients": 4,
+            "keys": 2,
+            "readRatio": 0.5,
+            "readFrom": "leader",
+            "opTimeoutMs": 500,
+            "network": {
+              "minLatencyMs": 1,
+              "maxLatencyMs": 10,
+              "dropRate": 0,
+              "duplicateRate": 0
+            },
+            "faults": [
+              {
+                "atMs": 800,
+                "action": "isolate",
+                "args": {
+                  "node": "n4"
+                }
+              },
+              {
+                "atMs": 2200,
+                "action": "heal",
+                "args": {}
+              }
+            ]
+          },
+          "verdict": "ok",
+          "ops": 374,
+          "faults": 2,
+          "durationMs": 3000,
+          "shrunkFrom": ""
+        }
+      ]
+    },
+    {
+      "assistant": [
+        {
+          "type": "text",
+          "text": "Try pause of leader (zombie) with longer duration and crashes."
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_01R3X9AvbMnTqKRvMbL8MQC7",
+          "name": "run_experiment",
+          "input": {
+            "spec": {
+              "seed": 42,
+              "durationMs": 4000,
+              "faults": [
+                {
+                  "atMs": 800,
+                  "action": "pause",
+                  "args": {
+                    "node": "n4",
+                    "durationMs": 1500
+                  }
+                }
+              ]
+            }
+          },
+          "caller": {
+            "type": "direct"
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "content": "experiment 1471f05c: target-a, seed 42, 4000 ms, 4 clients, 2 keys, reads 50% from leader, op timeout 500 ms\nnetwork: latency 1-10 ms, drop 0, duplicate 0\nfaults (1): 800 pause n4 1500ms\nverdict: ok (linearizable)\nops: 540 (ok 524, fail 9, info 7; reads 270, writes 270); messages 8244 sent, 0 dropped\nleaders: t1 n4 201-2300; t2 n3 997-4000\nevents: 2 elections started, 7 votes granted\n  194 n4 election-started t1\n  201 n4 became-leader t1 (log 0, commit 0)\n  800 n4 pause-start (1500ms)\n  980 n3 election-started t2\n  997 n3 became-leader t2 (log 92, commit 90)\n  2300 n4 pause-end (195 queued)\n  2300 n4 stepped-down t2\n\n\nbudget: {\"stepsUsed\":5,\"stepsLeft\":25}",
+          "tool_use_id": "toolu_01R3X9AvbMnTqKRvMbL8MQC7",
+          "type": "tool_result"
+        }
+      ],
+      "experiments": [
+        {
+          "id": "1471f05c",
+          "spec": {
+            "seed": 42,
+            "target": "target-a",
+            "durationMs": 4000,
+            "nodes": 5,
+            "clients": 4,
+            "keys": 2,
+            "readRatio": 0.5,
+            "readFrom": "leader",
+            "opTimeoutMs": 500,
+            "network": {
+              "minLatencyMs": 1,
+              "maxLatencyMs": 10,
+              "dropRate": 0,
+              "duplicateRate": 0
+            },
+            "faults": [
+              {
+                "atMs": 800,
+                "action": "pause",
+                "args": {
+                  "node": "n4",
+                  "durationMs": 1500
+                }
+              }
+            ]
+          },
+          "verdict": "ok",
+          "ops": 540,
+          "faults": 1,
+          "durationMs": 4000,
+          "shrunkFrom": ""
+        }
+      ]
+    },
+    {
+      "assistant": [
+        {
+          "type": "text",
+          "text": "Try crash of leader and followers with restarts, plus lossy network."
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_018JMWncfqDyovRE2kTWDjHE",
+          "name": "run_experiment",
+          "input": {
+            "spec": {
+              "seed": 42,
+              "durationMs": 5000,
+              "network": {
+                "minLatencyMs": 1,
+                "maxLatencyMs": 40,
+                "dropRate": 0.1,
+                "duplicateRate": 0.1
+              },
+              "faults": [
+                {
+                  "atMs": 700,
+                  "action": "crash",
+                  "args": {
+                    "node": "n4"
+                  }
+                },
+                {
+                  "atMs": 1200,
+                  "action": "restart",
+                  "args": {
+                    "node": "n4"
+                  }
+                },
+                {
+                  "atMs": 2000,
+                  "action": "crash",
+                  "args": {
+                    "node": "n3"
+                  }
+                },
+                {
+                  "atMs": 2300,
+                  "action": "crash",
+                  "args": {
+                    "node": "n5"
+                  }
+                },
+                {
+                  "atMs": 2800,
+                  "action": "restart",
+                  "args": {
+                    "node": "n3"
+                  }
+                },
+                {
+                  "atMs": 2900,
+                  "action": "restart",
+                  "args": {
+                    "node": "n5"
+                  }
+                }
+              ]
+            }
+          },
+          "caller": {
+            "type": "direct"
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "content": "experiment 8e1b20ba: target-a, seed 42, 5000 ms, 4 clients, 2 keys, reads 50% from leader, op timeout 500 ms\nnetwork: latency 1-40 ms, drop 0.1, duplicate 0.1\nfaults (6): 700 crash n4; 1200 restart n4; 2000 crash n3; 2300 crash n5; 2800 restart n3; 2900 restart n5\nverdict: ok (linearizable)\nops: 87 (ok 53, fail 1, info 33; reads 34, writes 53); messages 1618 sent, 227 dropped\nleaders: t1 n4 227-700; t2 n3 914-2000; t3 n2 2212-5000\nevents: 6 elections started, 9 votes granted\n  194 n4 election-started t1\n  203 n3 election-started t1\n  207 n1 election-started t1\n  227 n4 became-leader t1 (log 0, commit 0)\n  700 n4 crash\n  883 n3 election-started t2\n  914 n3 became-leader t2 (log 7, commit 6)\n  1200 n4 restart\n  2000 n3 crash\n  2171 n2 election-started t3\n  2204 n4 election-started t3\n  2212 n2 became-leader t3 (log 30, commit 28)\n  2300 n5 crash\n  2800 n3 restart\n  2900 n5 restart\n\n\nbudget: {\"stepsUsed\":6,\"stepsLeft\":24}",
+          "tool_use_id": "toolu_018JMWncfqDyovRE2kTWDjHE",
+          "type": "tool_result"
+        }
+      ],
+      "experiments": [
+        {
+          "id": "8e1b20ba",
+          "spec": {
+            "seed": 42,
+            "target": "target-a",
+            "durationMs": 5000,
+            "nodes": 5,
+            "clients": 4,
+            "keys": 2,
+            "readRatio": 0.5,
+            "readFrom": "leader",
+            "opTimeoutMs": 500,
+            "network": {
+              "minLatencyMs": 1,
+              "maxLatencyMs": 40,
+              "dropRate": 0.1,
+              "duplicateRate": 0.1
+            },
+            "faults": [
+              {
+                "atMs": 700,
+                "action": "crash",
+                "args": {
+                  "node": "n4"
+                }
+              },
+              {
+                "atMs": 1200,
+                "action": "restart",
+                "args": {
+                  "node": "n4"
+                }
+              },
+              {
+                "atMs": 2000,
+                "action": "crash",
+                "args": {
+                  "node": "n3"
+                }
+              },
+              {
+                "atMs": 2300,
+                "action": "crash",
+                "args": {
+                  "node": "n5"
+                }
+              },
+              {
+                "atMs": 2800,
+                "action": "restart",
+                "args": {
+                  "node": "n3"
+                }
+              },
+              {
+                "atMs": 2900,
+                "action": "restart",
+                "args": {
+                  "node": "n5"
+                }
+              }
+            ]
+          },
+          "verdict": "ok",
+          "ops": 87,
+          "faults": 6,
+          "durationMs": 5000,
+          "shrunkFrom": ""
+        }
+      ]
+    },
+    {
+      "assistant": [
+        {
+          "type": "thinking",
+          "thinking": "",
+          "signature": "CAQS6gYKEAgTGAI4AUIIdGhpbmtpbmcSDDREKZEScowel348EhoMJvdFFtaZkZ1fqGlbIjATLRJY3GxnjMd4JKMFI1ND4Fe9LHaKBBorNNgDCFvmWhrVEI0+121M4VhT6uxYymsqhwb18R6YV2q9TqEnDlVqUsw/wpYa4gR/4ZeBe8wvKTSdMzscw6vAqtj+TI43a/ll8w/Q+CuMNGk/gUAFSOHHz/Pu1LCKGEkFs4hBCfR4GyRfl4BvnALmHXL1Cg/7MXkVgWq5MIlsaMcJRbf/X6cND9VrPPZBXKm5C2B+vjLIAVnzIwF38oufPJFlHx6vtS4Qmk82QNZlFPYjvQQeMBpFXFwAZ9cWNW6RhvuxEnXenZphDdHR+MIkeF12PJui1AST7HzmWp837zS9QWf2y4LfdBf3RUkCuDYsE4xj+tHQb7mNV/ON4dtNomxy4pcJ7yFNtuMFIg3zbLcuZgCi3Wxt4eiiX6+96QHadLwBuSZHxjgO70Lg/qpDsC3Kl+Cx4+LeM5c4scmKVqg9l60fII1t+PiaiOr4Fdb1GNiI1EKZehBO/CzZLtqJE1zXYkVd4pmV/7XQzkkwczZLGn/AJU++1rVSOm0ADmWSdwJelHNsrf43qTWyprf6zgjKls7PA47Bk8/hGr0RiDGmT9/7oIHY8EDVdgRyaVqeOzn6hpXtQCIyOZ5dQG9i0R8xGM34l06o069jqUKG/HqYaAvPQzAMR1VnQyQGaueh7eKG77IK5OjRcEEFE8Hy0HIb4KlJomXVxvT0GM3e/pDkNapqe1NHSvykz75BPzp5kDMzpkALUF3tR80p8viE3AmecU42Nv1gc3QRcvJ46qEOGP2L2ugtMxXl0+oNXd0OQYuZXAHa3lBPjgMnsg0v/sHRAlqZHQCjIWGOnKEB0Z2eeZDu7wRpLmAjznFWbXNcJ0HIgdwPKdc8orqqMZqy1iTeTAizJDxncLsSs5Ilecu3PQJ7ZjGeWA5gBwxJXw+09QY7BMR48UK9SvHrztaxWeQ4ntJaWrsnMVcL0/B6SsxVe+SWxku78txCrLg97fWi0GNBK8mJ7SmZrvo+gpy/IRRoSY3l2ooE41f3+yXye7I75Cn8I1O00DJlJzDxsFrFT+ozQcJ/53mN4VCm8TqLtTPyWat3XTYkzO+/zUBcdvW2GAE="
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_01QgGecSYMVJGmfU9XAKbS9Z",
+          "name": "run_experiment",
+          "input": {
+            "spec": {
+              "seed": 42,
+              "durationMs": 6000,
+              "clients": 6,
+              "readFrom": "any",
+              "network": {
+                "minLatencyMs": 1,
+                "maxLatencyMs": 30,
+                "dropRate": 0.05,
+                "duplicateRate": 0.05
+              },
+              "faults": [
+                {
+                  "atMs": 500,
+                  "action": "partition",
+                  "args": {
+                    "groups": [
+                      [
+                        "n4",
+                        "n1"
+                      ],
+                      [
+                        "n2",
+                        "n3",
+                        "n5"
+                      ]
+                    ]
+                  }
+                },
+                {
+                  "atMs": 1500,
+                  "action": "heal",
+                  "args": {}
+                },
+                {
+                  "atMs": 2000,
+                  "action": "partition",
+                  "args": {
+                    "groups": [
+                      [
+                        "n5",
+                        "n2"
+                      ],
+                      [
+                        "n1",
+                        "n3",
+                        "n4"
+                      ]
+                    ]
+                  }
+                },
+                {
+                  "atMs": 3000,
+                  "action": "heal",
+                  "args": {}
+                },
+                {
+                  "atMs": 3500,
+                  "action": "isolate",
+                  "args": {
+                    "node": "n3"
+                  }
+                },
+                {
+                  "atMs": 4500,
+                  "action": "heal",
+                  "args": {}
+                }
+              ]
+            }
+          },
+          "caller": {
+            "type": "direct"
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "content": "experiment b020e22c: target-a, seed 42, 6000 ms, 6 clients, 2 keys, reads 50% from any, op timeout 500 ms\nnetwork: latency 1-30 ms, drop 0.05, duplicate 0.05\nfaults (6): 500 partition n4,n1 | n2,n3,n5; 1500 heal; 2000 partition n5,n2 | n1,n3,n4; 3000 heal; 3500 isolate n3; 4500 heal\nverdict: ok (linearizable)\nops: 221 (ok 166, fail 6, info 49; reads 111, writes 110); messages 3612 sent, 623 dropped\nleaders: t1 n4 211-1516; t2 n3 762-3032; t10 n3 3325-4536; t11 n1 3667-6000\nevents: 14 elections started, 14 votes granted\n  194 n4 election-started t1\n  203 n3 election-started t1\n  207 n1 election-started t1\n  211 n4 became-leader t1 (log 0, commit 0)\n  500 partition (n4,n1 | n2,n3,n5)\n  715 n3 election-started t2\n  762 n3 became-leader t2 (log 11, commit 9)\n  1500 heal\n  1516 n4 stepped-down t2\n  2000 partition (n5,n2 | n1,n3,n4)\n  2256 n5 election-started t3\n  2436 n5 election-started t4\n  2669 n5 election-started t5\n  2892 n2 election-started t6\n  2947 n5 election-started t7\n  3000 heal\n  3032 n3 stepped-down t7\n  3135 n2 election-started t8\n  3153 n5 election-started t9\n  3169 n4 election-started t3\n  3286 n3 election-started t10\n  3325 n3 became-leader t10 (log 80, commit 79)\n  3500 partition (n3 | n1,n2,n4,n5)\n  3655 n1 election-started t11\n  ... 3 more (use inspect_events)\n\n\nbudget: {\"stepsUsed\":7,\"stepsLeft\":23}",
+          "tool_use_id": "toolu_01QgGecSYMVJGmfU9XAKbS9Z",
+          "type": "tool_result"
+        }
+      ],
+      "experiments": [
+        {
+          "id": "b020e22c",
+          "spec": {
+            "seed": 42,
+            "target": "target-a",
+            "durationMs": 6000,
+            "nodes": 5,
+            "clients": 6,
+            "keys": 2,
+            "readRatio": 0.5,
+            "readFrom": "any",
+            "opTimeoutMs": 500,
+            "network": {
+              "minLatencyMs": 1,
+              "maxLatencyMs": 30,
+              "dropRate": 0.05,
+              "duplicateRate": 0.05
+            },
+            "faults": [
+              {
+                "atMs": 500,
+                "action": "partition",
+                "args": {
+                  "groups": [
+                    [
+                      "n4",
+                      "n1"
+                    ],
+                    [
+                      "n2",
+                      "n3",
+                      "n5"
+                    ]
+                  ]
+                }
+              },
+              {
+                "atMs": 1500,
+                "action": "heal",
+                "args": {}
+              },
+              {
+                "atMs": 2000,
+                "action": "partition",
+                "args": {
+                  "groups": [
+                    [
+                      "n5",
+                      "n2"
+                    ],
+                    [
+                      "n1",
+                      "n3",
+                      "n4"
+                    ]
+                  ]
+                }
+              },
+              {
+                "atMs": 3000,
+                "action": "heal",
+                "args": {}
+              },
+              {
+                "atMs": 3500,
+                "action": "isolate",
+                "args": {
+                  "node": "n3"
+                }
+              },
+              {
+                "atMs": 4500,
+                "action": "heal",
+                "args": {}
+              }
+            ]
+          },
+          "verdict": "ok",
+          "ops": 221,
+          "faults": 6,
+          "durationMs": 6000,
+          "shrunkFrom": ""
+        }
+      ]
+    },
+    {
+      "assistant": [
+        {
+          "type": "thinking",
+          "thinking": "",
+          "signature": "CAQSlgcKEAgTGAI4AUIIdGhpbmtpbmcSDJZWH10ZH83Xmfsa/hoMGbNSFLYMm76t02ZCIjCMNFt8kr2BDkmP9MRTICLXjaqdCsuDpm13ID9qityeAj5rSd82cy/F0A+uw1Sycrkqswag3yj/Q5/97fFupWGaJh+HO225YTbFo9HPmSWRxE8At6+MrBVh1KBx3sSDMOgWucqMl2E/I1vX0bK6R1JxXcrQ6oZ8w7uihioe5eaERQ8gChyUr93SWiz/5Ieufw1zNKvrLIIHU5nCVZjRY/kpfMzqZ4Vmp/qRvExCnazjKDBzX3vTbnNY+P4MQF/euQhm33VAmNYnkOtFgH7ImP9z+/h2ly7XyTb9Qz/LkEyFpSe9QrZlaR9fYzivEBgGeFiuaS8Ghpv6lSPkGpetldLVxMXMjk7LhX88Z4NSBqdjbQYNz3TQgbFnEYbfxgvswOp++BSxaKxfDufyBZaspsZq2H+eLcIrXrrXmNgCwpau6lQjNJj5JTBGtbDOkfrgUyxAvFW6Lfk2nkwyCMddc/iIjpo6815vIkT98LttFrxSQBU0Cd1WS1YqGXDguCGhLRY7SoAkJVgM1KKzoYYFFR8pFmowjZHAcEIgCOPu9TL8KGNevNqK55qclqH7Ktr1JB+lFcGZn3/mBQvhUCeadIVBWUv/Dii9Gg3LwQr+uLQKFjUP7DdvdEBIAYJsIbFny/TSOsdSsttEAvL9k5HBrSCeBrevfi73eU3RohuPSY28WFPUukL3LTgCkbDvQIE/HxTDJgbwxA/k2XRz11WIiWA5dCAE2CoVD1ivvx3AJZM5LGkTuOaU1P4VP+yDitjoyGNjgOYXJauERXVzphHplsvuZF//kzPCWs0YpQt1mRhkoBLobwyBqqNMd5760If6kUwfwIA9jCXucLMjQuaojuH/+IcOOM92rTEW4tQXIXj8rjbn9sv66xU3L+lF5oGgoR/PeO/ZwnYRVHcqp/do9USO47+zD/wlLwUM3D+zBNWsqh1s+B6TzR5OOD1DLpgEEaiLOFiYBmH6i5sygG+O4Nmf+n6tKhtbyUa/G03gLIApOk9u98ULcUpQ5iqDaK3H+m41o25NKg3nABiDFCUNyHqpQ6xGdt6FKEzo0eDFyKmtvh6cJOvi8WDgi1eBL4syAG63Urvk6AsPjqBvZMbbn8qhZYCorlyNVdXt8JayTslzGeNad/6uZOcSfZuF3aFj1Lf2LuWu/YkYAQ=="
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_0136FUPcMPECkpYjRx9cdaGN",
+          "name": "run_experiment",
+          "input": {
+            "spec": {
+              "seed": 42,
+              "durationMs": 5000,
+              "faults": [
+                {
+                  "atMs": 1000,
+                  "action": "crash",
+                  "args": {
+                    "node": "n4"
+                  }
+                },
+                {
+                  "atMs": 1000,
+                  "action": "crash",
+                  "args": {
+                    "node": "n1"
+                  }
+                },
+                {
+                  "atMs": 1000,
+                  "action": "crash",
+                  "args": {
+                    "node": "n2"
+                  }
+                },
+                {
+                  "atMs": 1500,
+                  "action": "restart",
+                  "args": {
+                    "node": "n4"
+                  }
+                },
+                {
+                  "atMs": 1500,
+                  "action": "restart",
+                  "args": {
+                    "node": "n1"
+                  }
+                },
+                {
+                  "atMs": 1500,
+                  "action": "restart",
+                  "args": {
+                    "node": "n2"
+                  }
+                },
+                {
+                  "atMs": 2500,
+                  "action": "crash",
+                  "args": {
+                    "node": "n3"
+                  }
+                },
+                {
+                  "atMs": 2500,
+                  "action": "crash",
+                  "args": {
+                    "node": "n5"
+                  }
+                },
+                {
+                  "atMs": 3000,
+                  "action": "restart",
+                  "args": {
+                    "node": "n3"
+                  }
+                },
+                {
+                  "atMs": 3000,
+                  "action": "restart",
+                  "args": {
+                    "node": "n5"
+                  }
+                }
+              ]
+            }
+          },
+          "caller": {
+            "type": "direct"
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "content": "experiment 923734da: target-a, seed 42, 5000 ms, 4 clients, 2 keys, reads 50% from leader, op timeout 500 ms\nnetwork: latency 1-10 ms, drop 0, duplicate 0\nfaults (10): 1000 crash n4; 1000 crash n1; 1000 crash n2; 1500 restart n4; 1500 restart n1; 1500 restart n2; 2500 crash n3; 2500 crash n5; 3000 restart n3; 3000 restart n5\nverdict: ok (linearizable)\nops: 595 (ok 566, fail 16, info 13; reads 303, writes 292); messages 8949 sent, 54 dropped\nleaders: t1 n4 201-1000; t4 n3 1693-2500; t5 n4 2676-5000\nevents: 6 elections started, 14 votes granted\n  194 n4 election-started t1\n  201 n4 became-leader t1 (log 0, commit 0)\n  1000 n4 crash\n  1000 n1 crash\n  1000 n2 crash\n  1257 n3 election-started t2\n  1477 n3 election-started t3\n  1500 n4 restart\n  1500 n1 restart\n  1500 n2 restart\n  1660 n2 election-started t2\n  1678 n3 election-started t4\n  1693 n3 became-leader t4 (log 125, commit 124)\n  2500 n3 crash\n  2500 n5 crash\n  2665 n4 election-started t5\n  2676 n4 became-leader t5 (log 244, commit 243)\n  3000 n3 restart\n  3000 n5 restart\n\n\nbudget: {\"stepsUsed\":8,\"stepsLeft\":22}",
+          "tool_use_id": "toolu_0136FUPcMPECkpYjRx9cdaGN",
+          "type": "tool_result"
+        }
+      ],
+      "experiments": [
+        {
+          "id": "923734da",
+          "spec": {
+            "seed": 42,
+            "target": "target-a",
+            "durationMs": 5000,
+            "nodes": 5,
+            "clients": 4,
+            "keys": 2,
+            "readRatio": 0.5,
+            "readFrom": "leader",
+            "opTimeoutMs": 500,
+            "network": {
+              "minLatencyMs": 1,
+              "maxLatencyMs": 10,
+              "dropRate": 0,
+              "duplicateRate": 0
+            },
+            "faults": [
+              {
+                "atMs": 1000,
+                "action": "crash",
+                "args": {
+                  "node": "n4"
+                }
+              },
+              {
+                "atMs": 1000,
+                "action": "crash",
+                "args": {
+                  "node": "n1"
+                }
+              },
+              {
+                "atMs": 1000,
+                "action": "crash",
+                "args": {
+                  "node": "n2"
+                }
+              },
+              {
+                "atMs": 1500,
+                "action": "restart",
+                "args": {
+                  "node": "n4"
+                }
+              },
+              {
+                "atMs": 1500,
+                "action": "restart",
+                "args": {
+                  "node": "n1"
+                }
+              },
+              {
+                "atMs": 1500,
+                "action": "restart",
+                "args": {
+                  "node": "n2"
+                }
+              },
+              {
+                "atMs": 2500,
+                "action": "crash",
+                "args": {
+                  "node": "n3"
+                }
+              },
+              {
+                "atMs": 2500,
+                "action": "crash",
+                "args": {
+                  "node": "n5"
+                }
+              },
+              {
+                "atMs": 3000,
+                "action": "restart",
+                "args": {
+                  "node": "n3"
+                }
+              },
+              {
+                "atMs": 3000,
+                "action": "restart",
+                "args": {
+                  "node": "n5"
+                }
+              }
+            ]
+          },
+          "verdict": "ok",
+          "ops": 595,
+          "faults": 10,
+          "durationMs": 5000,
+          "shrunkFrom": ""
+        }
+      ]
+    },
+    {
+      "assistant": [
+        {
+          "type": "thinking",
+          "thinking": "",
+          "signature": "CAQSwAgKEAgTGAI4AUIIdGhpbmtpbmcSDCjYXp0bw2B2j5X29BoM/IcJOPxvH08LXGVpIjC9iobIyQWlItET1oJFJ18ZlOoWD/IdfM4oPUKemW8I6r790SG7JEOtXiYHrQDOp/Mq3QepTdIzPkBcm1FrN4gs0mb3EzGeTQPEFm/mKeJ0N1jKuz6YVnTMPuVH2tlMWXPwrpyMmlEgQqXeGIRh++l+T7ujTOeyVZM/51cjjyMigU0HTnhlkH6KyaJzGy/LYk+f3i1gw/m8TwdxgCY1YHAV0FHQmnqLQ/VXW5RoAzS8eAl+WEOY2S8QucmsT/NZFKy0oQzMdSm/ChbSGpKUWzecj0jPuttVIWKHebW59qtIxZORQM9JxpKlz82sGDVhXwKCD15cdfj9yw9MopGkOGv0hnc0JsQ7YZXiIQkVHcDLts0s/3CYlnclFJ7qrmVJJVqW9j3I34VxtNQaerI9aD8xwgo+9DRN5uMb3TOKh8AYRbkROfXOIlh5wdgaOK0nPCrtsU9wmya51XNBZe5Jc+SKiKSdVhhtz6tiom105/8X3P9CpHaz2H+c85N+7uJGH/YmjbUDcl295ZatIhTUb46cfhKY/x0ClCzeQB6k1f9BvfhM0hcpx4mgZCKjC+U97PFWj0lLk9F3O+xp8jj26F31bR8bKg7wSeJkjKeiVNOZJWL5HW7hgo/yCytGkyBy6odqHhqXr0DrXW7Vr53fJiRV2lspWdCuuGR/uIwzOu65vPOUBTVgTJVqnxTWbbQDD/6Exj0i4gtdxbQobdeMlCrMyG+QOzStD6j9bv70RRbd6dKc00oT5n6xtDL4TuT4ph60zr4FzHLkp4zye5YcYa4SRGrZimfJUyiTcfEVNrLn8flzskX9/h6J37TtCi1jlHVZCzL8f2h3c+AwYWJcX5wV5Ml9jev0sEklCaJfyQKOeODHF2V2CqrJE1/iJ+/hdmZNNX+MnrebdR3KGZeb67/vJli9YuusrpCoHb7LzO2ogvilhHXj8ZEwgCAsllbVWrAL5hYR36Z/FH5RzBIpQ7gas0sbVKXA0PGo/gFRhcP3uWXwGZ229O0SL81e1cgIlJqToBooTF0aJXeXbNpKkADXsNyCvLFDRI6A4laepdHfuybMQeL4EG0msZbAf+J42j5OEbbxXXF17pu6OXPLAOhZpqVO3LnDpiEcia/pzM19U4w7Dd3KGtFBu37iYuQYB1DokmINBs9zUtOiURt9TiHDP9L7uU1NyDVZHUQbmGOp3rl5/0fPDC2JYsLM+8EUfRQHc8/5r1mUApJP/RRbcO7fNOLE7zkNhk7lS7NaVaPUWd1eNm+vDVDH4Ano9XJ0jTI4RV10QLHgONbQIWCP3UkLbYVB2Wog7D2PxsptVqWQMXMTekslBgCFdd50mR+4KYB8nN0wLSq3KN8tuNP2uJQYkN7sRc7ML08bnbIdvP7WLRgB"
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_01LFAvH7RYLQniNhwKFz2VLV",
+          "name": "run_experiment",
+          "input": {
+            "spec": {
+              "seed": 42,
+              "durationMs": 5000,
+              "clients": 8,
+              "readFrom": "any",
+              "readRatio": 0.7,
+              "network": {
+                "minLatencyMs": 1,
+                "maxLatencyMs": 80
+              },
+              "faults": [
+                {
+                  "atMs": 800,
+                  "action": "pause",
+                  "args": {
+                    "node": "n4",
+                    "durationMs": 800
+                  }
+                },
+                {
+                  "atMs": 2000,
+                  "action": "pause",
+                  "args": {
+                    "node": "n3",
+                    "durationMs": 800
+                  }
+                },
+                {
+                  "atMs": 3000,
+                  "action": "isolate",
+                  "args": {
+                    "node": "n1"
+                  }
+                },
+                {
+                  "atMs": 3800,
+                  "action": "heal",
+                  "args": {}
+                }
+              ]
+            }
+          },
+          "caller": {
+            "type": "direct"
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "content": "experiment 1e48f459: target-a, seed 42, 5000 ms, 8 clients, 2 keys, reads 70% from any, op timeout 500 ms\nnetwork: latency 1-80 ms, drop 0, duplicate 0\nfaults (4): 800 pause n4 800ms; 2000 pause n3 800ms; 3000 isolate n1; 3800 heal\nverdict: ok (linearizable)\nops: 171 (ok 131, fail 17, info 23; reads 111, writes 60); messages 2954 sent, 63 dropped\nleaders: t2 n3 424-2800; t3 n2 2332-3876; t9 n2 4203-5000\nevents: 13 elections started, 11 votes granted\n  194 n4 election-started t1\n  203 n3 election-started t1\n  207 n1 election-started t1\n  354 n3 election-started t2\n  424 n3 became-leader t2 (log 0, commit 0)\n  800 n4 pause-start (800ms)\n  1600 n4 pause-end (66 queued)\n  2000 n3 pause-start (800ms)\n  2195 n2 election-started t3\n  2240 n4 election-started t3\n  2332 n2 became-leader t3 (log 57, commit 54)\n  2800 n3 pause-end (58 queued)\n  2800 n3 stepped-down t3\n  3000 partition (n1 | n2,n3,n4,n5)\n  3150 n1 election-started t4\n  3348 n1 election-started t5\n  3632 n1 election-started t6\n  3800 heal\n  3876 n2 stepped-down t6\n  3915 n1 election-started t7\n  4087 n1 election-started t8\n  4110 n2 election-started t9\n  4155 n3 election-started t9\n  4203 n2 became-leader t9 (log 112, commit 108)\n\n\nbudget: {\"stepsUsed\":9,\"stepsLeft\":21}",
+          "tool_use_id": "toolu_01LFAvH7RYLQniNhwKFz2VLV",
+          "type": "tool_result"
+        }
+      ],
+      "experiments": [
+        {
+          "id": "1e48f459",
+          "spec": {
+            "seed": 42,
+            "target": "target-a",
+            "durationMs": 5000,
+            "nodes": 5,
+            "clients": 8,
+            "keys": 2,
+            "readRatio": 0.7,
+            "readFrom": "any",
+            "opTimeoutMs": 500,
+            "network": {
+              "minLatencyMs": 1,
+              "maxLatencyMs": 80,
+              "dropRate": 0,
+              "duplicateRate": 0
+            },
+            "faults": [
+              {
+                "atMs": 800,
+                "action": "pause",
+                "args": {
+                  "node": "n4",
+                  "durationMs": 800
+                }
+              },
+              {
+                "atMs": 2000,
+                "action": "pause",
+                "args": {
+                  "node": "n3",
+                  "durationMs": 800
+                }
+              },
+              {
+                "atMs": 3000,
+                "action": "isolate",
+                "args": {
+                  "node": "n1"
+                }
+              },
+              {
+                "atMs": 3800,
+                "action": "heal",
+                "args": {}
+              }
+            ]
+          },
+          "verdict": "ok",
+          "ops": 171,
+          "faults": 4,
+          "durationMs": 5000,
+          "shrunkFrom": ""
+        }
+      ]
+    },
+    {
+      "assistant": [
+        {
+          "type": "thinking",
+          "thinking": "",
+          "signature": "CAQSsgcKEAgTGAI4AUIIdGhpbmtpbmcSDCzPVVkvTob9nNgYMhoMO8QnjTu0d/JKxe9DIjBnIs8JTVei4Gcp1piTqFocgYUdepz0J8O9SN+p+7UrKBwmfS3anfXe6yhYSMoyIoIqzwYF107GH97iZofZjAC7aSzKuOZfeRdF6Q2Q4Scqe51H2KbXWFa50SLdP53dc81GGC8uZbbd1QKs1cIhiBVXnoGzjVfq84aMfZ/HczVseB9fe0ZvKz0W6NlkAoiaAQHY+5UJrjtRCCHZzlc1l8mNeUbwjZlG8M1oVFrdrWK0+pj8KLZmySaiz0JrESx2Lv5z6fzN0p/12OjskmZJQYOTytN3F7egpKwdZOFMpkjJnNXx9hWRcJe8t143sY3JRYMpCmKLUQnvTnBI2G5/e7JMWqKQ2rL3otWs9njaeo5j3R+NPi1o68JZR1kSElFt//dPJRbbeIagiFhXx8vyND4c8/AjhB+vMoWdFUpXto/8lGq1D1VM9XedLaFUQ0ccy6fw62evJDhNjkaTfujkkFqxjYO5/K28aDSg173UakzfyxKEFVJrAVEyzl2rUVhC7ah0uwOrRX5MXaSg8NbvuO0q/Nctnu+Q0rd4opk/74G69EoCLWPtKJXVItkih4WstBzI9Y+T2t6gap0MhQFJ+BUQR0vQoMQB5ymzunVbsyMDgXV5JGeMxqAUseKVYV8WtIMPobW/qJu2KEJskN08GZ1vAU/1/CRWj+q2LCQHGEE6Kq4NCQJHAqzbD0PdpyGEy+9EJKqusxl4XVEK6CnOAUI1sNGAUvAyZfwsK+LcQtz0I2jIpls3VGiD0k2wrHnjHfO+mzFiGO7egJe4wqyR2OWOlNEqMg7D8p3uFKZhV53KdXjNhinkO0icI9tGN5OtupDXQmpf4AH8Mo4HI6xy2/Eu/fZagBhEOpQdVH8yhsPV5sdEXTKE9wYZa5W9X+qdHxUARR8oLba/461gXmiw7bXiW5UxACqb/XRSU3NcunVqa9nA2CGPTifK9Gm2VI+EIOeHDZXgLuZQStfJ4GlizmbBUpHQsdTPNWUrM6INa9rmLzTY2Eb27txh8sI+lQEPURQc/hdesPvuLCOOnFWVdPEX1xkiEc/PG71yUiOFN6eU8aknRezqxln0WV1piX0ldRGYdPufEMoU3shnZqcSdUtf5bgV0PQLipFl8cru8WPDrnipr+Y5Kgz7Ox/Mr4DCKcmihwWPiKSXvfQMzJ1YK1oyBTgfijFaUaaZYtrEmYAjhvbwGAE="
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_01JX8Qx84D8qgxJXFDNcvJS5",
+          "name": "run_experiment",
+          "input": {
+            "spec": {
+              "seed": 7,
+              "durationMs": 6000,
+              "clients": 6,
+              "network": {
+                "minLatencyMs": 1,
+                "maxLatencyMs": 50,
+                "dropRate": 0.15,
+                "duplicateRate": 0.3
+              },
+              "faults": [
+                {
+                  "atMs": 1000,
+                  "action": "isolate",
+                  "args": {
+                    "node": "n4"
+                  }
+                },
+                {
+                  "atMs": 2000,
+                  "action": "heal",
+                  "args": {}
+                },
+                {
+                  "atMs": 2500,
+                  "action": "isolate",
+                  "args": {
+                    "node": "n3"
+                  }
+                },
+                {
+                  "atMs": 3500,
+                  "action": "heal",
+                  "args": {}
+                },
+                {
+                  "atMs": 4000,
+                  "action": "crash",
+                  "args": {
+                    "node": "n1"
+                  }
+                },
+                {
+                  "atMs": 4500,
+                  "action": "restart",
+                  "args": {
+                    "node": "n1"
+                  }
+                }
+              ]
+            }
+          },
+          "caller": {
+            "type": "direct"
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "content": "experiment 0f426164: target-a, seed 7, 6000 ms, 6 clients, 2 keys, reads 50% from leader, op timeout 500 ms\nnetwork: latency 1-50 ms, drop 0.15, duplicate 0.3\nfaults (6): 1000 isolate n4; 2000 heal; 2500 isolate n3; 3500 heal; 4000 crash n1; 4500 restart n1\nverdict: ok (linearizable)\nops: 157 (ok 100, fail 1, info 56; reads 85, writes 72); messages 3031 sent, 694 dropped\nleaders: t1 n4 206-2052; t3 n1 1415-1436; t4 n5 1431-3600; t10 n5 3775-6000\nevents: 13 elections started, 16 votes granted\n  150 n4 election-started t1\n  206 n4 became-leader t1 (log 0, commit 0)\n  1000 partition (n4 | n1,n2,n3,n5)\n  1161 n2 election-started t2\n  1166 n1 election-started t2\n  1185 n5 election-started t2\n  1340 n1 election-started t3\n  1367 n5 election-started t4\n  1415 n1 became-leader t3 (log 17, commit 16)\n  1431 n5 became-leader t4 (log 18, commit 16)\n  1436 n1 stepped-down t4\n  2000 heal\n  2052 n4 stepped-down t4\n  2500 partition (n3 | n1,n2,n4,n5)\n  2683 n3 election-started t5\n  2966 n3 election-started t6\n  3198 n3 election-started t7\n  3387 n3 election-started t8\n  3500 heal\n  3589 n3 election-started t9\n  3600 n5 stepped-down t8\n  3726 n1 election-started t10\n  3751 n5 election-started t10\n  3775 n5 became-leader t10 (log 100, commit 99)\n  ... 2 more (use inspect_events)\n\n\nbudget: {\"stepsUsed\":10,\"stepsLeft\":20}",
+          "tool_use_id": "toolu_01JX8Qx84D8qgxJXFDNcvJS5",
+          "type": "tool_result"
+        }
+      ],
+      "experiments": [
+        {
+          "id": "0f426164",
+          "spec": {
+            "seed": 7,
+            "target": "target-a",
+            "durationMs": 6000,
+            "nodes": 5,
+            "clients": 6,
+            "keys": 2,
+            "readRatio": 0.5,
+            "readFrom": "leader",
+            "opTimeoutMs": 500,
+            "network": {
+              "minLatencyMs": 1,
+              "maxLatencyMs": 50,
+              "dropRate": 0.15,
+              "duplicateRate": 0.3
+            },
+            "faults": [
+              {
+                "atMs": 1000,
+                "action": "isolate",
+                "args": {
+                  "node": "n4"
+                }
+              },
+              {
+                "atMs": 2000,
+                "action": "heal",
+                "args": {}
+              },
+              {
+                "atMs": 2500,
+                "action": "isolate",
+                "args": {
+                  "node": "n3"
+                }
+              },
+              {
+                "atMs": 3500,
+                "action": "heal",
+                "args": {}
+              },
+              {
+                "atMs": 4000,
+                "action": "crash",
+                "args": {
+                  "node": "n1"
+                }
+              },
+              {
+                "atMs": 4500,
+                "action": "restart",
+                "args": {
+                  "node": "n1"
+                }
+              }
+            ]
+          },
+          "verdict": "ok",
+          "ops": 157,
+          "faults": 6,
+          "durationMs": 6000,
+          "shrunkFrom": ""
+        }
+      ]
+    },
+    {
+      "assistant": [
+        {
+          "type": "thinking",
+          "thinking": "",
+          "signature": "CAQShQgKEAgTGAI4AUIIdGhpbmtpbmcSDMuc6nq6toqcqZvk4RoMPo5fpn7V9kxiHk9eIjBRGrP0psqyyFCnINj7htTwCknQer8Zdj9HVTVHJ7CUGGi2Pi8lihNmcEF20r+cfcQqogcY1YBHd2DBYZVIUJSMph937XdQh9HIJTcEXNrGYivHyDY0SuhYFApiGlUKHehZkY7aoa1sMcklXzUVHhUtPx3qbOY6HlBqHUSgt0f8feCOba2VaQEBShUhXtsHpGkVkEUS71q3M3BjTJGedLh31AWNH9vzo/iCYGGnNnvHSSyew2hZCUDPFKWYHQaPhLL7coEgs/BOKzCKeVzHDX4NbqVnVjBno3ZixG9sVw/4NU4gBFY1l3BCZEJ5DqvLECIuLHKbJEjxyRXHqSEx7yGgv1tWyABMRuxe4C2sy51uUKcNTBsMHGugxw+LwVkOSvmHZ3u+rXoiAk/51L2jacyFT3ejSpP+Pj+ReGTK7RunDzaFKi+FOiLH9YUUCTzrH9Q58X8nWUGphnfNtJ1d6skR+0EkUtVF6lIq15dJpJQ2BnXsfJE4M0oCm1t4PhiHdJX1lUNVrSAY9RutbRBcIpakz3Em/TcBY92D53EgpS0G+3KrstWOBNtYRIAbSNdqcZ6rFr0BOJvy3JU3ODjt0tgx3rj/1/PCB49LwLluVmlfL24A+Pdh1nVoZ9vFPR1GU5Rd0brfN3+8hhaurD8hyigjvvBZiL/EQOszkDI6gNkHlH/CD7GNFNwUhDjuycAVZM5XkzYIesN509gQcacPCsEZgybVesR4z62+Bo97iGBnLcicSX1MyKApJ8jdT5KQlA1fCjrXXVwvXrmMu7jf/HlVKqJcA4IfbWBu9z5MyquU1uM9IpYXWPLcoVtBs+2z1h9Gg2/HsV/2Zy8k08uXXNI2YSG7yAQZSeTPUiW7HDXFvtLJgAwbSf1kyv0dbJpq2RyK8EBYUjQE446/jgzqj/AGBGaY49NTTeJYVYDHMtjt8P6opCrhuQNWDrB3HNEcJKsn1PWlN7H/8AF0TSLKTOvorWltoXGkgw8hlzCKpnxaq2dLuThquRMuItnvVagRGdBEHyhL952qUVj2B65+573FEDCEV6CfdWPs7yF07RlgzLQyDVs+O6pWJv6ZqwXON0rvjs/kxyRb4ShpOs234hnCoapatnDBH+rnLpKpfFq5mYj5xAwzPrPfCzvrrM28km1bfcl905EcpkfupTiO5eSQ1HW7ygtdpkjcgmgN6STbMmp+uJm+5654/cItFRNc59N5rwSeKaheL2t4byhx3KtwdZmPfFIejU+2Oq9aUYDaU/arpWk3kkgx6oIpkchUkZzC+fbndxPhCaviM076gcIK0a/Qn8EYAQ=="
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_01Af7sTijyFmofL3JBL6ACdB",
+          "name": "run_experiment",
+          "input": {
+            "spec": {
+              "seed": 42,
+              "durationMs": 4000,
+              "clients": 6,
+              "faults": [
+                {
+                  "atMs": 300,
+                  "action": "partition",
+                  "args": {
+                    "groups": [
+                      [
+                        "n4"
+                      ],
+                      [
+                        "n1",
+                        "n2",
+                        "n3",
+                        "n5"
+                      ]
+                    ]
+                  }
+                },
+                {
+                  "atMs": 700,
+                  "action": "heal",
+                  "args": {}
+                },
+                {
+                  "atMs": 1000,
+                  "action": "partition",
+                  "args": {
+                    "groups": [
+                      [
+                        "n4",
+                        "n1"
+                      ],
+                      [
+                        "n2",
+                        "n3",
+                        "n5"
+                      ]
+                    ]
+                  }
+                },
+                {
+                  "atMs": 1300,
+                  "action": "heal",
+                  "args": {}
+                },
+                {
+                  "atMs": 1600,
+                  "action": "pause",
+                  "args": {
+                    "node": "n4",
+                    "durationMs": 300
+                  }
+                },
+                {
+                  "atMs": 2000,
+                  "action": "pause",
+                  "args": {
+                    "node": "n4",
+                    "durationMs": 300
+                  }
+                },
+                {
+                  "atMs": 2400,
+                  "action": "isolate",
+                  "args": {
+                    "node": "n4"
+                  }
+                },
+                {
+                  "atMs": 2600,
+                  "action": "heal",
+                  "args": {}
+                }
+              ]
+            }
+          },
+          "caller": {
+            "type": "direct"
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "content": "experiment f14b6a98: target-a, seed 42, 4000 ms, 6 clients, 2 keys, reads 50% from leader, op timeout 500 ms\nnetwork: latency 1-10 ms, drop 0, duplicate 0\nfaults (8): 300 partition n4 | n1,n2,n3,n5; 700 heal; 1000 partition n4,n1 | n2,n3,n5; 1300 heal; 1600 pause n4 300ms; 2000 pause n4 300ms; 2400 isolate n4; 2600 heal\nverdict: ok (linearizable)\nops: 786 (ok 754, fail 22, info 10; reads 402, writes 384); messages 11079 sent, 280 dropped\nleaders: t1 n4 206-707; t3 n2 555-1316; t7 n2 1511-4000\nevents: 8 elections started, 13 votes granted\n  194 n4 election-started t1\n  206 n4 became-leader t1 (log 0, commit 0)\n  300 partition (n4 | n1,n2,n3,n5)\n  472 n5 election-started t2\n  472 n1 election-started t2\n  542 n2 election-started t3\n  555 n2 became-leader t3 (log 20, commit 17)\n  700 heal\n  707 n4 stepped-down t3\n  1000 partition (n4,n1 | n2,n3,n5)\n  1222 n4 election-started t4\n  1249 n1 election-started t5\n  1300 heal\n  1316 n2 stepped-down t5\n  1429 n4 election-started t6\n  1500 n2 election-started t7\n  1511 n2 became-leader t7 (log 138, commit 135)\n  1600 n4 pause-start (300ms)\n  1900 n4 pause-end (111 queued)\n  2000 n4 pause-start (300ms)\n  2300 n4 pause-end (213 queued)\n  2400 partition (n4 | n1,n2,n3,n5)\n  2600 heal\n\n\nbudget: {\"stepsUsed\":11,\"stepsLeft\":19}",
+          "tool_use_id": "toolu_01Af7sTijyFmofL3JBL6ACdB",
+          "type": "tool_result"
+        }
+      ],
+      "experiments": [
+        {
+          "id": "f14b6a98",
+          "spec": {
+            "seed": 42,
+            "target": "target-a",
+            "durationMs": 4000,
+            "nodes": 5,
+            "clients": 6,
+            "keys": 2,
+            "readRatio": 0.5,
+            "readFrom": "leader",
+            "opTimeoutMs": 500,
+            "network": {
+              "minLatencyMs": 1,
+              "maxLatencyMs": 10,
+              "dropRate": 0,
+              "duplicateRate": 0
+            },
+            "faults": [
+              {
+                "atMs": 300,
+                "action": "partition",
+                "args": {
+                  "groups": [
+                    [
+                      "n4"
+                    ],
+                    [
+                      "n1",
+                      "n2",
+                      "n3",
+                      "n5"
+                    ]
+                  ]
+                }
+              },
+              {
+                "atMs": 700,
+                "action": "heal",
+                "args": {}
+              },
+              {
+                "atMs": 1000,
+                "action": "partition",
+                "args": {
+                  "groups": [
+                    [
+                      "n4",
+                      "n1"
+                    ],
+                    [
+                      "n2",
+                      "n3",
+                      "n5"
+                    ]
+                  ]
+                }
+              },
+              {
+                "atMs": 1300,
+                "action": "heal",
+                "args": {}
+              },
+              {
+                "atMs": 1600,
+                "action": "pause",
+                "args": {
+                  "node": "n4",
+                  "durationMs": 300
+                }
+              },
+              {
+                "atMs": 2000,
+                "action": "pause",
+                "args": {
+                  "node": "n4",
+                  "durationMs": 300
+                }
+              },
+              {
+                "atMs": 2400,
+                "action": "isolate",
+                "args": {
+                  "node": "n4"
+                }
+              },
+              {
+                "atMs": 2600,
+                "action": "heal",
+                "args": {}
+              }
+            ]
+          },
+          "verdict": "ok",
+          "ops": 786,
+          "faults": 8,
+          "durationMs": 4000,
+          "shrunkFrom": ""
+        }
+      ]
+    },
+    {
+      "assistant": [
+        {
+          "type": "thinking",
+          "thinking": "",
+          "signature": "CAQSqAgKEAgTGAI4AUIIdGhpbmtpbmcSDLBcPr6BEdeQbb7ftRoMG3+2Nxq2oAfNkyzGIjBoeHOTP2RFhILkhVd/yR8rsnSNRb41HXdYrUrypxUiGQe7mIMtc3wvPdvCVvxxaKgqxQfTCPS0N9xfXKy2hdVFFLdDByft+vfvGKhNCHwAnH+GAJx4uZM/42WsYPoQLboQZoJOV/fHct5bkvhBd6wzuyDL7rDWsI1G8aAxU0rq0tIiy3EvHHNonuSYzCEErs1bxoJGl0zwSB2LFjN/7JilFAt+jvbLK1bctaOVdDM2+D9jIp0DFSbhD+n3XE4rPlfrNtJcfRhfi3YvE/zKfNZYNN2BIbxaCbKDoOPXXqBdk1gljfdGMn4cyEfcQGgdMEy+zU8fo2RBBwf3XJd8E5JGUw/q8jadPG+fn5Ad/N/nrGnQS3QNJZRiFFholQCeVyq4M1wK+N5UWg0NDd+sJBJ2uiFwSYvNkpVG+TNP0Nz3JBK+VoxRr50tPdi69qPWjTykLaCYc3earZp40GOuuDB1B0y0UDaqMm4oeZB3I1fSdik3VOsgLnEybmtJc16VzKiccs1rAWxiN7XjxTD7IK6c+VAAj/0zadIO6CUqNnqPDhdr5WXE0KlXNBAva9+7IaXg/fjEuuFg0m2UwvRFarmjKPtScsUp34YWdFhl4tbqo0RK8qSpGawosFCd/szyH1G5hE0Jq2jR5ax2yEqkv2NBjzVp4bjUcewFPuVF7EJZLAubb6AAg1LnoiHxV+7dC5vN/5XLmD1FnZYh71t7gudbk1OwQ9orOunxyoXa6dVOTmexYmIdjgu9h+tULiL5c35ybS9PjmWX7f/SmAzTQil7rsNShWWnkKAwNDZRMwUEyWc6x/vFcah/aFn1IEn/ztyk8giVRUNNdTK8Y8eG9p3WgiPSUwIT9c+AotjLu7/cNQ81AUg6esJc9OsnM50L7nTWLKw9uU/+2lOyShHUsfuOYMlmdbMcm/xxxXRxqXKrHfIk8pywfb3Ho0rcQ9ABr+U+O/RJHiW5xku9ekaMpgp/2EWD3LH1iWzqTxnf75s3z7DOet35E6rIRT9iNM3wSVvT7H7S7MW5eRC1CJflMMURMyY1o73mhz5T0bNjkk3/8X9KdgCrghVSwjoWRDoiK9p/qP8FDx+AY44Dx5KtVij+y6+D3ZUt/VVL1ePWZ3U+h3tZydgw0BpjvdxPX0acvccsUaci5C99YC4VfEI09FklZXvw/0JKkuoF2y7pju7y4gK5c8nvXoazXe32q35EiXkoLSmzwCPkz8Dfz6uLN/xjj3KhEUpz9odfDkn/J6rmvFTlBQT07nea29wKXGRIFPqgRBE/BXQfaXD6CFPpypw4l7KTpcPNa1XseZujzOZckAehnNGi0RyTVCakQX7yyvOsm2X4gJnxlhgB"
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_018AwiZHaZ6bQguET9prz6Pf",
+          "name": "run_experiment",
+          "input": {
+            "spec": {
+              "seed": 42,
+              "durationMs": 4000,
+              "clients": 6,
+              "readFrom": "any",
+              "faults": [
+                {
+                  "atMs": 600,
+                  "action": "isolate",
+                  "args": {
+                    "node": "n1"
+                  }
+                },
+                {
+                  "atMs": 1800,
+                  "action": "isolate",
+                  "args": {
+                    "node": "n2"
+                  }
+                },
+                {
+                  "atMs": 3000,
+                  "action": "heal",
+                  "args": {}
+                }
+              ]
+            }
+          },
+          "caller": {
+            "type": "direct"
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "content": "experiment b2fa3e8c: target-a, seed 42, 4000 ms, 6 clients, 2 keys, reads 50% from any, op timeout 500 ms\nnetwork: latency 1-10 ms, drop 0, duplicate 0\nfaults (3): 600 isolate n1; 1800 isolate n2; 3000 heal\nverdict: ok (linearizable)\nops: 719 (ok 677, fail 38, info 4; reads 357, writes 362); messages 10417 sent, 477 dropped\nleaders: t1 n4 206-1810; t8 n3 2061-4000\nevents: 13 elections started, 7 votes granted\n  194 n4 election-started t1\n  206 n4 became-leader t1 (log 0, commit 0)\n  600 partition (n1 | n2,n3,n4,n5)\n  812 n1 election-started t2\n  1027 n1 election-started t3\n  1255 n1 election-started t4\n  1510 n1 election-started t5\n  1751 n1 election-started t6\n  1800 partition (n2 | n1,n3,n4,n5)\n  1810 n4 stepped-down t6\n  2037 n1 election-started t7\n  2047 n2 election-started t2\n  2047 n3 election-started t8\n  2061 n3 became-leader t8 (log 300, commit 299)\n  2235 n2 election-started t3\n  2405 n2 election-started t4\n  2690 n2 election-started t5\n  2935 n2 election-started t6\n  3000 heal\n\n\nbudget: {\"stepsUsed\":12,\"stepsLeft\":18}",
+          "tool_use_id": "toolu_018AwiZHaZ6bQguET9prz6Pf",
+          "type": "tool_result"
+        }
+      ],
+      "experiments": [
+        {
+          "id": "b2fa3e8c",
+          "spec": {
+            "seed": 42,
+            "target": "target-a",
+            "durationMs": 4000,
+            "nodes": 5,
+            "clients": 6,
+            "keys": 2,
+            "readRatio": 0.5,
+            "readFrom": "any",
+            "opTimeoutMs": 500,
+            "network": {
+              "minLatencyMs": 1,
+              "maxLatencyMs": 10,
+              "dropRate": 0,
+              "duplicateRate": 0
+            },
+            "faults": [
+              {
+                "atMs": 600,
+                "action": "isolate",
+                "args": {
+                  "node": "n1"
+                }
+              },
+              {
+                "atMs": 1800,
+                "action": "isolate",
+                "args": {
+                  "node": "n2"
+                }
+              },
+              {
+                "atMs": 3000,
+                "action": "heal",
+                "args": {}
+              }
+            ]
+          },
+          "verdict": "ok",
+          "ops": 719,
+          "faults": 3,
+          "durationMs": 4000,
+          "shrunkFrom": ""
+        }
+      ]
+    },
+    {
+      "assistant": [
+        {
+          "type": "thinking",
+          "thinking": "",
+          "signature": "CAQS1QoKEAgTGAI4AUIIdGhpbmtpbmcSDNTS66lAZteUWSBDtBoMU6kmb6Am70dEWcBrIjAZqaVd+6grvuMiIKl1ED6laKnzqu7rTkb/NOk7EU3/x6uYAs5bZjWf/3peFbtEyAEq8glyo9zHc1MElkonmxjVn6g+SZCMIffU6ew4A1i0tpFt8vP8vidrxNI0BcdzfCdwkiJYhUr1dYS5AYTweGNcaeGl6IPO/o+BBsACnzDhKsVrv/5Az5vA+heR1eksm2i4MZqIuW4iyC7vstqeoZEy/sEM0I/pNgDU/gOwn9e2tMjDpLLVETPAXN1LJ0qAcbfbMPXG8PlA7Lfg3KJKq3OIEc22mXpgHXhTTU9wKOGLkxQ7lBB23aNK/nuAsbPEWGalFm8frxBNLHCsXrDrsDQdSAtm+QkbnnlqZ4wkrC1+MrcTCHXa4uJBB3AkP/PH7vKrv+3N5iuPUN2yvvkq+vqqVrQShkhHMIOD1s/zk2Mwuzyzv0LfYZNWzzU7ttyt8qJI02AP2eTBUAHOwSZxNuM9dYTiiO/fnPihiothBShcvMj9QYf641+WVx8liakJXfFYqgpiwgceFE6fyTjaOFk3EAwzR67TeNJeAbI3K/bBm9KHlH54hDVCIxOjvwfEoSbOQbSTPSV0nBEmy4EGDYJOzeC8lNCNUyrhok8DXDq2ZOLaT9HXym1J6tLEkNoOeymPnH0aSCSsZ9VKPwquAzRfIPCTYdbGuXZyozE+rCIvRAUWOANm/BuqehMOeKHl14CuOXOkbpz3F6vCdHoUnyntLH8v8kJILgQdA9MhVl6v6mcZ6AWHi/SzpFLlK1Cxp3cbpAZ5xnC9w9sKNUOQNyxu2gJb1RwsrhjOllO7ngPF1oeiKl8NrPGnnbp7WqY0ZLBztGAxfuXN6GonMkvirPDUH5wk24bxis3gxNjYYjbu3fJQpd6RD+MYldgzf2VttlzPmknBvbUVAW927uoAoEm5UYjh+Sr/8jqFXARwI2zNIFlZA5Ve1i8bL9yCJxd0IQs02T0lQ7HyYk9Dc5r5JCzuNxrGG3y27KcEnOGJM5pMsDTMss0TANQS950W0ISLUQaf95LTQsAE3SXgkHXNF7u0IVMR7mAwlIVjvIOuScwBdb3Kf0Bsm5zn+wkTeCyJo1gw/AZuWZIggdM3BATgzI3hYzbDtONU0ZKcg8zioot3vdS1W2gfp7PfbqSy+ZD0Hyc+At4vFj5fDIk6jRnq/JeWrFI14wcH3+8+A0VOwscu65mzuh9LwOy3ncv086SZos709roVVOf8pnu2L90idAswapxXMQ379ikazFQfQlHgg/gjZTmp1bvHCB1789gtc/Cl9d0SaqZs9ZRHPNDlAbum3jwJhjYOa/sROmVoTLe6TknYFSRwSVZ3TAvBK06LocZQl7D3mQg9C0SQnXsgqD1tZFMNcejLOKlkPF1dwVh9tdwHSFE6+TtnPKlr8qMBZxlmhUtUB3v7NEk80Vra7ufleEFjIs0Md6ejB85n1P7oHBmS3z8tTRq7tlnhCCkK6Sx21JJulaeNA/ZLjuT17qs/BOl8TKXNDDXCRROPsZvJ861T0ZuXo53IvErGWC1g9sgfaiQJTx3xWJnY2s9gI80kaEWVUn2XSBpqG88TPwaDJYMxwrVd/xLBtRk5xUIeBGQQS2vHLNuZmWqcMOLXPNe6EDsAvIyb/YrccnQlmzC6XAOtOKqp8iyDvk5M4MgXuMOfiEQ5xKirZTHyBuHFooNTaj/QMbMnZzHxkjW4s2LfBmtWt9VrgRKLQVM7CBFu4p2ZYnKJxM699CrbuO1br4ofWm8XkngYAQ=="
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_01614NGQnn5EL79MpYfJfVXW",
+          "name": "run_experiment",
+          "input": {
+            "spec": {
+              "seed": 11,
+              "durationMs": 8000,
+              "clients": 6,
+              "network": {
+                "minLatencyMs": 1,
+                "maxLatencyMs": 25,
+                "dropRate": 0.05
+              },
+              "faults": [
+                {
+                  "atMs": 800,
+                  "action": "crash",
+                  "args": {
+                    "node": "n4"
+                  }
+                },
+                {
+                  "atMs": 1100,
+                  "action": "restart",
+                  "args": {
+                    "node": "n4"
+                  }
+                },
+                {
+                  "atMs": 1800,
+                  "action": "crash",
+                  "args": {
+                    "node": "n4"
+                  }
+                },
+                {
+                  "atMs": 1810,
+                  "action": "crash",
+                  "args": {
+                    "node": "n3"
+                  }
+                },
+                {
+                  "atMs": 2300,
+                  "action": "restart",
+                  "args": {
+                    "node": "n4"
+                  }
+                },
+                {
+                  "atMs": 2400,
+                  "action": "restart",
+                  "args": {
+                    "node": "n3"
+                  }
+                },
+                {
+                  "atMs": 3200,
+                  "action": "partition",
+                  "args": {
+                    "groups": [
+                      [
+                        "n1",
+                        "n2"
+                      ],
+                      [
+                        "n3",
+                        "n4",
+                        "n5"
+                      ]
+                    ]
+                  }
+                },
+                {
+                  "atMs": 4200,
+                  "action": "crash",
+                  "args": {
+                    "node": "n5"
+                  }
+                },
+                {
+                  "atMs": 4300,
+                  "action": "heal",
+                  "args": {}
+                },
+                {
+                  "atMs": 5000,
+                  "action": "restart",
+                  "args": {
+                    "node": "n5"
+                  }
+                },
+                {
+                  "atMs": 5500,
+                  "action": "crash",
+                  "args": {
+                    "node": "n1"
+                  }
+                },
+                {
+                  "atMs": 5500,
+                  "action": "crash",
+                  "args": {
+                    "node": "n2"
+                  }
+                },
+                {
+                  "atMs": 6200,
+                  "action": "restart",
+                  "args": {
+                    "node": "n1"
+                  }
+                },
+                {
+                  "atMs": 6200,
+                  "action": "restart",
+                  "args": {
+                    "node": "n2"
+                  }
+                }
+              ]
+            }
+          },
+          "caller": {
+            "type": "direct"
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "content": "experiment 3611e459: target-a, seed 11, 8000 ms, 6 clients, 2 keys, reads 50% from leader, op timeout 500 ms\nnetwork: latency 1-25 ms, drop 0.05, duplicate 0\nfaults (14): 800 crash n4; 1100 restart n4; 1800 crash n4; 1810 crash n3; 2300 restart n4; 2400 restart n3; 3200 partition n1,n2 | n3,n4,n5; 4200 crash n5; 4300 heal; 5000 restart n5; 5500 crash n1; 5500 crash n2; 6200 restart n1; 6200 restart n2\nverdict: ok (linearizable)\nops: 436 (ok 372, fail 7, info 57; reads 215, writes 221); messages 6250 sent, 712 dropped\nleaders: t1 n1 169-4320; t3 n3 3616-8000\nevents: 3 elections started, 8 votes granted\n  151 n1 election-started t1\n  169 n1 became-leader t1 (log 0, commit 0)\n  800 n4 crash\n  1100 n4 restart\n  1800 n4 crash\n  1810 n3 crash\n  2300 n4 restart\n  2400 n3 restart\n  3200 partition (n1,n2 | n3,n4,n5)\n  3405 n5 election-started t2\n  3590 n3 election-started t3\n  3616 n3 became-leader t3 (log 150, commit 149)\n  4200 n5 crash\n  4300 heal\n  4320 n1 stepped-down t3\n  5000 n5 restart\n  5500 n1 crash\n  5500 n2 crash\n  6200 n1 restart\n  6200 n2 restart\n\n\nbudget: {\"stepsUsed\":13,\"stepsLeft\":17}",
+          "tool_use_id": "toolu_01614NGQnn5EL79MpYfJfVXW",
+          "type": "tool_result"
+        }
+      ],
+      "experiments": [
+        {
+          "id": "3611e459",
+          "spec": {
+            "seed": 11,
+            "target": "target-a",
+            "durationMs": 8000,
+            "nodes": 5,
+            "clients": 6,
+            "keys": 2,
+            "readRatio": 0.5,
+            "readFrom": "leader",
+            "opTimeoutMs": 500,
+            "network": {
+              "minLatencyMs": 1,
+              "maxLatencyMs": 25,
+              "dropRate": 0.05,
+              "duplicateRate": 0
+            },
+            "faults": [
+              {
+                "atMs": 800,
+                "action": "crash",
+                "args": {
+                  "node": "n4"
+                }
+              },
+              {
+                "atMs": 1100,
+                "action": "restart",
+                "args": {
+                  "node": "n4"
+                }
+              },
+              {
+                "atMs": 1800,
+                "action": "crash",
+                "args": {
+                  "node": "n4"
+                }
+              },
+              {
+                "atMs": 1810,
+                "action": "crash",
+                "args": {
+                  "node": "n3"
+                }
+              },
+              {
+                "atMs": 2300,
+                "action": "restart",
+                "args": {
+                  "node": "n4"
+                }
+              },
+              {
+                "atMs": 2400,
+                "action": "restart",
+                "args": {
+                  "node": "n3"
+                }
+              },
+              {
+                "atMs": 3200,
+                "action": "partition",
+                "args": {
+                  "groups": [
+                    [
+                      "n1",
+                      "n2"
+                    ],
+                    [
+                      "n3",
+                      "n4",
+                      "n5"
+                    ]
+                  ]
+                }
+              },
+              {
+                "atMs": 4200,
+                "action": "crash",
+                "args": {
+                  "node": "n5"
+                }
+              },
+              {
+                "atMs": 4300,
+                "action": "heal",
+                "args": {}
+              },
+              {
+                "atMs": 5000,
+                "action": "restart",
+                "args": {
+                  "node": "n5"
+                }
+              },
+              {
+                "atMs": 5500,
+                "action": "crash",
+                "args": {
+                  "node": "n1"
+                }
+              },
+              {
+                "atMs": 5500,
+                "action": "crash",
+                "args": {
+                  "node": "n2"
+                }
+              },
+              {
+                "atMs": 6200,
+                "action": "restart",
+                "args": {
+                  "node": "n1"
+                }
+              },
+              {
+                "atMs": 6200,
+                "action": "restart",
+                "args": {
+                  "node": "n2"
+                }
+              }
+            ]
+          },
+          "verdict": "ok",
+          "ops": 436,
+          "faults": 14,
+          "durationMs": 8000,
+          "shrunkFrom": ""
+        }
+      ]
+    },
+    {
+      "assistant": [
+        {
+          "type": "thinking",
+          "thinking": "",
+          "signature": "CAQS/QgKEAgTGAI4AUIIdGhpbmtpbmcSDJl6dx+IdSGPubyYlhoMliHJ6W10Vl8lJtprIjAOZKNA8J3N+dHGG/pDrmsVAZ3eqLAa09hju4k9IzoH8UraGeTT8LXHP16gv8+YAFkqmghC6/6ChRRHQKZq+UhaqZJ7ZgNjANTFoaq57M1Vp96RHWMmDYzS3HGUfx/GtTB8xwqml/s3ijpcExrwoAZbxzOmg2uRpWqR8DT4S2MjFgk2tTPoqWgZOQeMQNSkRk84kesutb9KRUEQsb/rpTC5l3HW9R3jQiZfVdfYebacxm4APGuAXTjw1/IlPIWIQXhQm5mLUKhMvX/FKK9+15wqrTTr8QqlJmxzActZifwyprJxCSd5sU+tGAw27Ybq8N3J+bO0RPXvaIY/ellP+/RxWEf5Uxw/R3RsnzCESwFygqDL64CAn54M4nYbVxorpqT5X4ItXrEF32r80elR9WeNCPOjh5huZiykM1gTCqsrNS17vdQlZ/ux5B8Qw4ovBO+/IoM3rwjqa7/IlO3Gf7M6FJD0qj/VwOH8sU+6H162JiI8WUKP5Ess/5IlqqrmUtD2QlIaTaKbOPOC9pzZHCSzeKJcRNeFoz85Y/Jm3Q5bAcexszgxt35PV+Za6K1TuU5g5iiXV4kyCpZ2Vuwq4AbkB0C9DscDy6fUF2Y5dfm5M/HRUx1ko7M1bE1qFeUP0GDNFNrgvAC0njRiunFj1Syf2hwwzxYw1B79E/dUJF4h2SfJI5kajNvnrsPHT2k5gkvCUYp3UUzV2M1X8aQ53t6NLA+4GYdlpsYf9mnG0LTOOX87TrBV1DVWOsPMN7YJGWx+vFkNYMY8qoqq9cHeGyn/ykuzIxaeb3gq2o+1TjyFhuHsNZc0F2dP/JucrrR7wOQ/cNXq5Hi1yvCktDIhbIRlPoxUgM5o3RJFyCG7rfkbAQO7isxPq1pNRfGaEV1XooThdAUGkze2QH/c3w4E1vsjM9qwrwvaoAG3Ld4VoVROmOwwzts0EQxtnVD/ClvavQ9hZhQxbzfGCCNksd4elw1qFFAymOeWe/WsqbNgmAz7yAMtN10WPcdYVZxQpRc08c7DasCHav0EnqE0Lr5d8/5JorZTzXkFGz8OzKqRiq49sqqJUuLWbz5pbgQJGFNt4npcHzV5BV2liGR88BaXqxgJolbkF6i1c6b6zFJ4H4k/5FfPN1PSWtIYKO9XM3LM9yJ06qEnsVebVUr0RiaCwaJ632cMYD9euxqglNEzyQ9bI4/Ady/3GaCNrcc0rTAJLaBOVEIoPKk3u9IhZ3bRMv/yjjIeAu7DKlA5b6vH/Ww+b6ppgNsUtD9LgS2liowgLrm2bxoQA7RAg4XQrPalEQvsbKaND9ssCwdbFRRytyy4gyPW6nFX2c0Cqj7ORO2b7RcezJoI00yGeGiv5pk51s/2O+T4A5ksAW20m8Ln8lL7LO561bhW8bLvGl4QrHI4o/rMq0Fy/Fo8VyVwg+jyRB3VEf++BuoEOXDDB+kpvX1QmNH2C3YXd60tg1oWQ9AYAQ=="
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_01K9o7PgmLhVAs4xfwYAAfwi",
+          "name": "run_experiment",
+          "input": {
+            "spec": {
+              "seed": 5,
+              "durationMs": 4000,
+              "clients": 8,
+              "keys": 1,
+              "readRatio": 0.8,
+              "faults": [
+                {
+                  "atMs": 800,
+                  "action": "partition",
+                  "args": {
+                    "groups": [
+                      [
+                        "n4",
+                        "n1"
+                      ],
+                      [
+                        "n2",
+                        "n3",
+                        "n5"
+                      ]
+                    ]
+                  }
+                },
+                {
+                  "atMs": 2500,
+                  "action": "heal",
+                  "args": {}
+                }
+              ]
+            }
+          },
+          "caller": {
+            "type": "direct"
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "content": "experiment c34f58e8: target-a, seed 5, 4000 ms, 8 clients, 1 keys, reads 80% from leader, op timeout 500 ms\nnetwork: latency 1-10 ms, drop 0, duplicate 0\nfaults (2): 800 partition n4,n1 | n2,n3,n5; 2500 heal\nverdict: ok (linearizable)\nops: 1174 (ok 1139, fail 29, info 6; reads 904, writes 270); messages 14858 sent, 1151 dropped\nleaders: t1 n3 168-2512; t15 n5 2730-4000\nevents: 16 elections started, 15 votes granted\n  155 n3 election-started t1\n  168 n3 became-leader t1 (log 0, commit 0)\n  800 partition (n4,n1 | n2,n3,n5)\n  946 n4 election-started t2\n  1018 n1 election-started t3\n  1278 n4 election-started t4\n  1283 n1 election-started t4\n  1476 n4 election-started t5\n  1498 n1 election-started t6\n  1697 n1 election-started t7\n  1854 n4 election-started t8\n  1884 n1 election-started t9\n  2084 n1 election-started t10\n  2274 n4 election-started t11\n  2379 n1 election-started t12\n  2500 heal\n  2512 n3 stepped-down t12\n  2560 n4 election-started t13\n  2669 n1 election-started t14\n  2719 n5 election-started t15\n  2730 n5 became-leader t15 (log 733, commit 729)\n\n\nbudget: {\"stepsUsed\":14,\"stepsLeft\":16}",
+          "tool_use_id": "toolu_01K9o7PgmLhVAs4xfwYAAfwi",
+          "type": "tool_result"
+        }
+      ],
+      "experiments": [
+        {
+          "id": "c34f58e8",
+          "spec": {
+            "seed": 5,
+            "target": "target-a",
+            "durationMs": 4000,
+            "nodes": 5,
+            "clients": 8,
+            "keys": 1,
+            "readRatio": 0.8,
+            "readFrom": "leader",
+            "opTimeoutMs": 500,
+            "network": {
+              "minLatencyMs": 1,
+              "maxLatencyMs": 10,
+              "dropRate": 0,
+              "duplicateRate": 0
+            },
+            "faults": [
+              {
+                "atMs": 800,
+                "action": "partition",
+                "args": {
+                  "groups": [
+                    [
+                      "n4",
+                      "n1"
+                    ],
+                    [
+                      "n2",
+                      "n3",
+                      "n5"
+                    ]
+                  ]
+                }
+              },
+              {
+                "atMs": 2500,
+                "action": "heal",
+                "args": {}
+              }
+            ]
+          },
+          "verdict": "ok",
+          "ops": 1174,
+          "faults": 2,
+          "durationMs": 4000,
+          "shrunkFrom": ""
+        }
+      ]
+    },
+    {
+      "assistant": [
+        {
+          "type": "thinking",
+          "thinking": "",
+          "signature": "CAQS/gYKEAgTGAI4AUIIdGhpbmtpbmcSDG1SC9JI83NksXJbuRoMRbUan9aKHJqG8LNfIjCwGns5jdJ4EhDLPBbSfsuJCpKZThCjJAaNMTRY+mekxjfD2suOiSwGK9En1DGx86wqmwaUyvxfxideUBM9+snMytBMdw58FvDzglFbYBWEoLLqJ+5P+WZtbvuY9CAgwizycUBD7yT+Rcvob760WSog6/mMx/cNYmwxjX0ZlKjSVKJzachtJ0sSBQTnXTwocTjqeIiPUYlnd56HauV4OIR9Whz9tVt//pf2xz/aLcrvWk6Ly7rP8hw1lODMRbOGjo7DN5sIdkKZhakrZn98FUYvN0N8MmhCHuw516zIs3KU6zwvzFOKHL3zryOH/e/pfHMBFvthbndPPcN34F+zWhXJVXaEwIYBfIdQMVNtyOYZD4WVyC79tqV0uNjcmBymVamnqbyu/NNpmBMllSLpdJ1k/WwZqN7p86lnCdhxmsZmQ++VyLBn2iQOK77f0jI0QrnlTAFOt8X0ZIP02E8kPWz1CDoYVBgo6XQzLZTdCDQIc+9n5TKnB28QKqFMZp+2TfD8QRseeqv+HZzFcVwrNi6AvBaMioKfIBYwEq3UPxrbxMh/Wa69BrT6KamaD6RiACPe5fgLfiDRmEdwQf9Vexst+FbfPLYZf4JcA36E1HDQUNqYdyqnuc7Tql9HSCBLmwCT4i4ZZfqGzGvIHPuTourQ1qK+y9NozjjIwqquwXP0N0gj3a1E8h5hAodd29ibI0bxNikOdG7zvgx45d9flTdSgiwVTogt8ybBMoemP6xgVHTpL8tRoU1o6lSRYeSah7+XexiQXOilPchDE3gCufTyDVLkiiAinRUv3ZQGGYrCTuMtCRrBJAuHqtpLAVnDrRwnEQY1ANzOPsKSy/P724Zc8Zo76kbo5whSvY5f50iN7sVUznru7KIBnkynRSZRKgk3j5ziul9vT4zvaeeBNPrYrFVtayDF9AuaDsTqhGdoemjBkHwT9MsOfKPpSQaAR+eZUw5fuXG+/WfWY91rUdXHO03XGowEWPYMNa4TXkJclqF8qGXtaffOZ8X6XR8GjTaHFDdodTJiJbou6zKaQMdLz8hEcgrO56T/ju88x1zCtom8q7tMpzlqXy8I2S9D3RgNxCzeEGoem1GoQTWN1zdNAuFvUZp4kdM6T1Jm7JQYAQ=="
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_01QzeeuY5jKmEiuRVZf1GmWi",
+          "name": "run_experiment",
+          "input": {
+            "spec": {
+              "seed": 5,
+              "durationMs": 4000,
+              "clients": 8,
+              "keys": 1,
+              "readRatio": 0.8,
+              "readFrom": "any",
+              "faults": [
+                {
+                  "atMs": 800,
+                  "action": "partition",
+                  "args": {
+                    "groups": [
+                      [
+                        "n3",
+                        "n1"
+                      ],
+                      [
+                        "n2",
+                        "n4",
+                        "n5"
+                      ]
+                    ]
+                  }
+                },
+                {
+                  "atMs": 2500,
+                  "action": "heal",
+                  "args": {}
+                }
+              ]
+            }
+          },
+          "caller": {
+            "type": "direct"
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "content": "experiment 4a4091d6: target-a, seed 5, 4000 ms, 8 clients, 1 keys, reads 80% from any, op timeout 500 ms\nnetwork: latency 1-10 ms, drop 0, duplicate 0\nfaults (2): 800 partition n3,n1 | n2,n4,n5; 2500 heal\nverdict: ok (linearizable)\nops: 551 (ok 497, fail 16, info 38; reads 451, writes 100); messages 8601 sent, 324 dropped\nleaders: t1 n3 161-2521; t3 n2 1224-4000\nevents: 4 elections started, 7 votes granted\n  155 n3 election-started t1\n  161 n3 became-leader t1 (log 0, commit 0)\n  800 partition (n3,n1 | n2,n4,n5)\n  990 n2 election-started t2\n  991 n5 election-started t2\n  1210 n2 election-started t3\n  1224 n2 became-leader t3 (log 164, commit 162)\n  2500 heal\n  2521 n3 stepped-down t3\n\n\nbudget: {\"stepsUsed\":15,\"stepsLeft\":15}",
+          "tool_use_id": "toolu_01QzeeuY5jKmEiuRVZf1GmWi",
+          "type": "tool_result"
+        }
+      ],
+      "experiments": [
+        {
+          "id": "4a4091d6",
+          "spec": {
+            "seed": 5,
+            "target": "target-a",
+            "durationMs": 4000,
+            "nodes": 5,
+            "clients": 8,
+            "keys": 1,
+            "readRatio": 0.8,
+            "readFrom": "any",
+            "opTimeoutMs": 500,
+            "network": {
+              "minLatencyMs": 1,
+              "maxLatencyMs": 10,
+              "dropRate": 0,
+              "duplicateRate": 0
+            },
+            "faults": [
+              {
+                "atMs": 800,
+                "action": "partition",
+                "args": {
+                  "groups": [
+                    [
+                      "n3",
+                      "n1"
+                    ],
+                    [
+                      "n2",
+                      "n4",
+                      "n5"
+                    ]
+                  ]
+                }
+              },
+              {
+                "atMs": 2500,
+                "action": "heal",
+                "args": {}
+              }
+            ]
+          },
+          "verdict": "ok",
+          "ops": 551,
+          "faults": 2,
+          "durationMs": 4000,
+          "shrunkFrom": ""
+        }
+      ]
+    },
+    {
+      "assistant": [
+        {
+          "type": "thinking",
+          "thinking": "",
+          "signature": "CAQSswkKEAgTGAI4AUIIdGhpbmtpbmcSDD0tJt+A0yddmcYYdxoMOKQ3XnG9cHYV2AwaIjA5eNVEg4fBEcttSISBbPeLZnjAgYSDKy3e+bR9OA5z2GqOCHC17Ub8tfTD35mJym4q0AgmfVrHJsUg9R5YqTcXor6+Qy622u7D2YdML14lJ5o/6ERjSm49WFBK2BrrbK1PWqmDxeQQ3dkiwL82RQZBkNDfHfIFpuevtEEbAC4YZMCUyv7tywxooaYy7iRzNmVY7mJBLZ36z9v8Dlj0iJyCsPH+M2kzc4YsHgRkzP2M5fYYvy5KY0Hv8+e0R2SQcGEzU1wIqlPLkRRQ+WmHqArzwvt/1LrVZ2+eWJoo8/CnnyEJ53oFJ7NmrLFvn+4VLy7qSDlPz9/8xh+gq7dbuL/KyMpsP2pWjPR29VqUZwvaIu41eMhJz0O1/b7LEObfGge2H3O/rAx5W6F3eMOVlAaa29eGZyAujGZ6VUqTieo9KDTzCllCfpFtcTpWYWjClaoaI6DhXoiZPB/nl0r02BSgC2eSsSdBfKnrraRn+LliMglBACuEfd0+4t3VVD6pN6JEjf6ogl5i5TP32an4LS7+B9ET2Qx9dQOBh/emrkr1AT8WyQunF+Wvd/IxPBtySvr1Wc6VLzC+zqIUPXj6vVbvRAphtWtZyIdU0MfXprLN8JHigPepBmUJ/LIwD/TgjZKqg+XwixiS14XR3xXquSzXZ1kYYmqJz3ulspnR1ElBOFy3cWoVnuUvFy04NrgE5N7h1c3Z2FCPx+CAiYYksy+sfya15Fqy85DLqsU6qDYzjzmWX2n10Cg+a2zGsB1EQxQKJQ0JzON7Oq5vhz/npt9By4DZcojWte5vr7F5GffaHLZTGg2wfUXAGJBA9LV9egFAaxM70afkB4ywcUuzVZtq26zExnu4wu6J3D/LAejPGpSA80jGm7AH/GaJLDKiWSy4PDgQM7TVoMprNo4I+O509PGPxspklsANCXGVlGLBoaKRmkSMtmDe4sCoMtg/8oa7Xr9yin/97twH2WI5fkLlBek1Vh7iiK85pePRTzSkV19RgTMbcFTUwnIlyF7WBsgUARHaO2blZeqTKBhPnWYKD5Et7lDBflHmr8EPjdF8Irmi0ifN+OLLvB7j1EDIJHCCHDlCzMSH88dQ+dEKczle18QCkp2+Xk/E5gQI8LFHjSogNA3wvN9cclNuHwU6Bbpm+kaFxnAzRhDA0FU1TBmj9pM9DAzT6X7IuGv+hzK0M+XlPsTnZu+dcki6Ha0PU+MHjGP1KcOfFXkk93m2xg1+LOwZ67whSkTqNz65OzdPCXVyNCWGCYfX3NX0oXO+xGN8gBI8xzEk+hBgS3l3tnLh7JX6D2ijfU/iimCVqFNiiBAWnX9UFwBOuAZcaEYO2Qv6tS1zt9W07xZP44NgieBMjAGFJn/VAain592SigRuSZdvVpqSnUtgGHwe48ekraadyKJv3Uc8L/um3mNS4ssuL20Imkx2NH+kEKHX1tsfPiFRvWbpXbPJL88j3t1CVnfj9DUJoYHSadoj/A8kkoezVOKzALowyWNefEGDOGHxWtQ3o4fQVpE2+4P6n4JFsoYQLT4YAQ=="
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_01CDPCJgwB9ti9qZaFyZTKg1",
+          "name": "run_experiment",
+          "input": {
+            "spec": {
+              "seed": 3,
+              "durationMs": 8000,
+              "clients": 6,
+              "network": {
+                "minLatencyMs": 20,
+                "maxLatencyMs": 150,
+                "dropRate": 0.05,
+                "duplicateRate": 0.05
+              },
+              "opTimeoutMs": 1000,
+              "faults": [
+                {
+                  "atMs": 1000,
+                  "action": "isolate",
+                  "args": {
+                    "node": "n4"
+                  }
+                },
+                {
+                  "atMs": 2500,
+                  "action": "heal",
+                  "args": {}
+                },
+                {
+                  "atMs": 2600,
+                  "action": "crash",
+                  "args": {
+                    "node": "n4"
+                  }
+                },
+                {
+                  "atMs": 3500,
+                  "action": "restart",
+                  "args": {
+                    "node": "n4"
+                  }
+                },
+                {
+                  "atMs": 4000,
+                  "action": "partition",
+                  "args": {
+                    "groups": [
+                      [
+                        "n1",
+                        "n2",
+                        "n3"
+                      ],
+                      [
+                        "n4",
+                        "n5"
+                      ]
+                    ]
+                  }
+                },
+                {
+                  "atMs": 5500,
+                  "action": "heal",
+                  "args": {}
+                },
+                {
+                  "atMs": 6000,
+                  "action": "pause",
+                  "args": {
+                    "node": "n1",
+                    "durationMs": 1200
+                  }
+                }
+              ]
+            }
+          },
+          "caller": {
+            "type": "direct"
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "content": "experiment 6e57591a: target-a, seed 3, 8000 ms, 6 clients, 2 keys, reads 50% from leader, op timeout 1000 ms\nnetwork: latency 20-150 ms, drop 0.05, duplicate 0.05\nfaults (7): 1000 isolate n4; 2500 heal; 2600 crash n4; 3500 restart n4; 4000 partition n1,n2,n3 | n4,n5; 5500 heal; 6000 pause n1 1200ms\nverdict: ok (linearizable)\nops: 84 (ok 38, fail 19, info 27; reads 36, writes 48); messages 1930 sent, 319 dropped\nleaders: t2 n2 509-630; t6 n2 1184-1348; t13 n2 2459-5615; t23 n2 6003-7220\nevents: 69 elections started, 32 votes granted\n  157 n2 election-started t1\n  157 n3 election-started t1\n  212 n1 election-started t1\n  317 n3 election-started t2\n  323 n2 election-started t2\n  509 n2 became-leader t2 (log 0, commit 0)\n  514 n3 election-started t3\n  578 n5 election-started t3\n  630 n2 stepped-down t3\n  717 n4 election-started t4\n  753 n3 election-started t4\n  772 n5 election-started t4\n  779 n1 election-started t4\n  950 n4 election-started t5\n  963 n1 election-started t5\n  966 n5 election-started t5\n  1000 partition (n4 | n1,n2,n3,n5)\n  1056 n2 election-started t6\n  1161 n4 election-started t6\n  1184 n2 became-leader t6 (log 1, commit 1)\n  1292 n3 election-started t7\n  1340 n1 election-started t7\n  1348 n2 stepped-down t7\n  1447 n4 election-started t7\n  ... 61 more (use inspect_events)\n\n\nbudget: {\"stepsUsed\":16,\"stepsLeft\":14}",
+          "tool_use_id": "toolu_01CDPCJgwB9ti9qZaFyZTKg1",
+          "type": "tool_result"
+        }
+      ],
+      "experiments": [
+        {
+          "id": "6e57591a",
+          "spec": {
+            "seed": 3,
+            "target": "target-a",
+            "durationMs": 8000,
+            "nodes": 5,
+            "clients": 6,
+            "keys": 2,
+            "readRatio": 0.5,
+            "readFrom": "leader",
+            "opTimeoutMs": 1000,
+            "network": {
+              "minLatencyMs": 20,
+              "maxLatencyMs": 150,
+              "dropRate": 0.05,
+              "duplicateRate": 0.05
+            },
+            "faults": [
+              {
+                "atMs": 1000,
+                "action": "isolate",
+                "args": {
+                  "node": "n4"
+                }
+              },
+              {
+                "atMs": 2500,
+                "action": "heal",
+                "args": {}
+              },
+              {
+                "atMs": 2600,
+                "action": "crash",
+                "args": {
+                  "node": "n4"
+                }
+              },
+              {
+                "atMs": 3500,
+                "action": "restart",
+                "args": {
+                  "node": "n4"
+                }
+              },
+              {
+                "atMs": 4000,
+                "action": "partition",
+                "args": {
+                  "groups": [
+                    [
+                      "n1",
+                      "n2",
+                      "n3"
+                    ],
+                    [
+                      "n4",
+                      "n5"
+                    ]
+                  ]
+                }
+              },
+              {
+                "atMs": 5500,
+                "action": "heal",
+                "args": {}
+              },
+              {
+                "atMs": 6000,
+                "action": "pause",
+                "args": {
+                  "node": "n1",
+                  "durationMs": 1200
+                }
+              }
+            ]
+          },
+          "verdict": "ok",
+          "ops": 84,
+          "faults": 7,
+          "durationMs": 8000,
+          "shrunkFrom": ""
+        }
+      ]
+    },
+    {
+      "assistant": [
+        {
+          "type": "thinking",
+          "thinking": "",
+          "signature": "CAQS6gcKEAgTGAI4AUIIdGhpbmtpbmcSDD0ncuqQBU3+odOqUhoMFXS7JjjWaSZnMoL0IjCpUdxQChZ5vUVtnPithEJVl97f9vLP2g/Nz654Bk/eLJL61k0Uz1MJl1F/t9qAXMYqhwdFp/ReYiaaYy0+yhaktY6Q6HHTL4XqFclNH9Wm13oj7kVPAgKRbmQ7Haku5Xb3CVGnUy4lt/dw23h8YiMLv/yg6F7RRIE2k04+H/wWkzSvJPXfZboLm6FXIrkjCl3ey5zGIZNd9e9FJ1/U7E976vK3lWQoIaJQS/sxwYfh8B5JR+tYeJsG/FnSV9SqWX2rWKadvduTkspfpXsiNJPKH3yoe2zvoP7QXosIFDXHByp97VQeGGSu5lkaMnBpaIFUuhoWDK6LJNv1zewd9fZZLpqzc9NFLyvmmzmoT5GLUX4j2v8LPbWz5Q+tfLYqfdglaVlBgBzZfzanlYa2mFoXY3OTxgxk1xl9k1h8iAj9Eac3YkxNdmBPLeoe6Jsx+M/EzyEcWnhxlSaUgUGcPKBwYNx3ezV0d71ihuYE/Myi5eQzAJ1yg/ZPDW+X45rzhT0DgMSGT5xvxcn2qipNiKZJ8yTtRHAUE4IewI8qgUH+INJcu5HwPkZVRVCnbCB2VHmGx9Vhii3gccLL7Pzi/pFoNRY5kbhH7ZObvZIh4ie3ZkKGZq1dFrZpIwjp3cNNZWkabvPfw6+nbVquyfgcCwk6Y4wqSJ07exwqiVryZmaZzUtZFQ6/xBPo0vqJYqo/EBdRJbaZrTlJbY2lXRLXX8fgaBHyH/abq2gWHRn2gM3wwUT7s2188cLO+Am0OCaA94yaP8Lv+2RjreTqyYbiXgI2ALhxaQP21+PeITRuE0+Sh7K66EKZzQagwyyMQMaSLQ7fUNZOheJg6OBNvBnChGgrLpkUPgO7IRC766JjNXkOkjz2lv20MhzjQYzcyOLXyWAifnr4VPA3vzpcISg6Ns3y7C3isKIxCSn09WT7K0NlmLUfuO0jm87ZKoZTiPPuQakJIsShhdAkK2XIRwbcQU8bSHvoKZYWX5HIigjTNdDEzjcKuJPp7fU/zphLxg/Vhm1Ir8gOCRulXDUBWTMpI6Kel7deX6QP/VO43tMOiENCIEQVBqByDfLCot6RTVmMDRpLaiZnF4u9/0kOhDI/d7p43YpxF1btw/kM4dywm2S/lz5t1vmF37S48ctdh/06nJi4kickfLQ/baOj2h5yVvxLolrpdnxMCZwe8YYBDvSU7BxlNJ15rHmoGheAsl9+TPN/uQb7U3cFb8cjzHnukUN4Wcaff2CBx+HS0ejVZR7YfHbQFDdjoVfV1jYYAQ=="
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_01DZLsKXRbYYP588yVAZQbku",
+          "name": "run_experiment",
+          "input": {
+            "spec": {
+              "seed": 21,
+              "durationMs": 8000,
+              "clients": 8,
+              "network": {
+                "minLatencyMs": 1,
+                "maxLatencyMs": 20
+              },
+              "faults": [
+                {
+                  "atMs": 600,
+                  "action": "isolate",
+                  "args": {
+                    "node": "n4"
+                  }
+                },
+                {
+                  "atMs": 1300,
+                  "action": "heal",
+                  "args": {}
+                },
+                {
+                  "atMs": 1800,
+                  "action": "isolate",
+                  "args": {
+                    "node": "n1"
+                  }
+                },
+                {
+                  "atMs": 2500,
+                  "action": "heal",
+                  "args": {}
+                },
+                {
+                  "atMs": 3000,
+                  "action": "isolate",
+                  "args": {
+                    "node": "n2"
+                  }
+                },
+                {
+                  "atMs": 3700,
+                  "action": "heal",
+                  "args": {}
+                },
+                {
+                  "atMs": 4200,
+                  "action": "isolate",
+                  "args": {
+                    "node": "n3"
+                  }
+                },
+                {
+                  "atMs": 4900,
+                  "action": "heal",
+                  "args": {}
+                },
+                {
+                  "atMs": 5400,
+                  "action": "isolate",
+                  "args": {
+                    "node": "n5"
+                  }
+                },
+                {
+                  "atMs": 6100,
+                  "action": "heal",
+                  "args": {}
+                },
+                {
+                  "atMs": 6600,
+                  "action": "isolate",
+                  "args": {
+                    "node": "n4"
+                  }
+                },
+                {
+                  "atMs": 7300,
+                  "action": "heal",
+                  "args": {}
+                }
+              ]
+            }
+          },
+          "caller": {
+            "type": "direct"
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "content": "experiment ec675a82: target-a, seed 21, 8000 ms, 8 clients, 2 keys, reads 50% from leader, op timeout 500 ms\nnetwork: latency 1-20 ms, drop 0, duplicate 0\nfaults (12): 600 isolate n4; 1300 heal; 1800 isolate n1; 2500 heal; 3000 isolate n2; 3700 heal; 4200 isolate n3; 4900 heal; 5400 isolate n5; 6100 heal; 6600 isolate n4; 7300 heal\nverdict: ok (linearizable)\nops: 1264 (ok 1187, fail 62, info 15; reads 657, writes 607); messages 16844 sent, 991 dropped\nleaders: t1 n3 173-1321; t6 n5 1514-2526; t10 n4 2736-3732; t15 n4 4011-4931; t20 n5 5143-6113; t21 n3 5628-7324; t25 n3 7519-8000\nevents: 27 elections started, 27 votes granted\n  155 n3 election-started t1\n  170 n2 election-started t1\n  173 n3 became-leader t1 (log 0, commit 0)\n  600 partition (n4 | n1,n2,n3,n5)\n  780 n4 election-started t2\n  995 n4 election-started t3\n  1266 n4 election-started t4\n  1300 heal\n  1321 n3 stepped-down t4\n  1489 n4 election-started t5\n  1497 n5 election-started t6\n  1514 n5 became-leader t6 (log 232, commit 228)\n  1800 partition (n1 | n2,n3,n4,n5)\n  2074 n1 election-started t7\n  2225 n1 election-started t8\n  2500 heal\n  2517 n1 election-started t9\n  2526 n5 stepped-down t9\n  2708 n4 election-started t10\n  2736 n4 became-leader t10 (log 418, commit 415)\n  3000 partition (n2 | n1,n3,n4,n5)\n  3261 n2 election-started t11\n  3464 n2 election-started t12\n  3697 n2 election-started t13\n  ... 28 more (use inspect_events)\n\n\nbudget: {\"stepsUsed\":17,\"stepsLeft\":13}",
+          "tool_use_id": "toolu_01DZLsKXRbYYP588yVAZQbku",
+          "type": "tool_result"
+        }
+      ],
+      "experiments": [
+        {
+          "id": "ec675a82",
+          "spec": {
+            "seed": 21,
+            "target": "target-a",
+            "durationMs": 8000,
+            "nodes": 5,
+            "clients": 8,
+            "keys": 2,
+            "readRatio": 0.5,
+            "readFrom": "leader",
+            "opTimeoutMs": 500,
+            "network": {
+              "minLatencyMs": 1,
+              "maxLatencyMs": 20,
+              "dropRate": 0,
+              "duplicateRate": 0
+            },
+            "faults": [
+              {
+                "atMs": 600,
+                "action": "isolate",
+                "args": {
+                  "node": "n4"
+                }
+              },
+              {
+                "atMs": 1300,
+                "action": "heal",
+                "args": {}
+              },
+              {
+                "atMs": 1800,
+                "action": "isolate",
+                "args": {
+                  "node": "n1"
+                }
+              },
+              {
+                "atMs": 2500,
+                "action": "heal",
+                "args": {}
+              },
+              {
+                "atMs": 3000,
+                "action": "isolate",
+                "args": {
+                  "node": "n2"
+                }
+              },
+              {
+                "atMs": 3700,
+                "action": "heal",
+                "args": {}
+              },
+              {
+                "atMs": 4200,
+                "action": "isolate",
+                "args": {
+                  "node": "n3"
+                }
+              },
+              {
+                "atMs": 4900,
+                "action": "heal",
+                "args": {}
+              },
+              {
+                "atMs": 5400,
+                "action": "isolate",
+                "args": {
+                  "node": "n5"
+                }
+              },
+              {
+                "atMs": 6100,
+                "action": "heal",
+                "args": {}
+              },
+              {
+                "atMs": 6600,
+                "action": "isolate",
+                "args": {
+                  "node": "n4"
+                }
+              },
+              {
+                "atMs": 7300,
+                "action": "heal",
+                "args": {}
+              }
+            ]
+          },
+          "verdict": "ok",
+          "ops": 1264,
+          "faults": 12,
+          "durationMs": 8000,
+          "shrunkFrom": ""
+        }
+      ]
+    },
+    {
+      "assistant": [
+        {
+          "type": "thinking",
+          "thinking": "",
+          "signature": "CAQSuQkKEAgTGAI4AUIIdGhpbmtpbmcSDPsOm0nhpSJkwcRkchoMa5IPeKMP1e7L+duRIjASAUyX/p7HxySNY1oIfJhmes41Hx6bvTKVAcDY4Raa8gwTKtTbyLamOpXtfmBv2CUq1ggcaWBJOe5YoH8pqohwCiR4Ghio/v86F7QFRH6jZH66+rmyZbn6qSycEtlsKkwiNhTLrSUQqeK0nJrUVus5K7D9jE3DluH2sXI8FBM6akDIuzg/T9+SUFprDX67HpQ1FL1N2mahJbB01I4cvQ5OqCbiTv4eKTF7R8Y8nJt69fgAoM/VSRspYRn/rjmVgZpdFzc0XFd3871XFIkyNHftUx9TzOmvGUgEeTaL+hKKUf7uaODCeoxyqqXFvNq52zlsxJaJD7uSXKwQbEQUNAFevRkdl5KGdT8I3mCOdBqF9UUXnzbR1SavM1bUr0YnWX1cDtljPjfugCFIarCjV9P9STf2qhg/QssSXbLKuuL6cXzKHiaHoI1MfIH6V9LYGaChQ3YewxTwYDRwjcZ+GT3Ru3dVrQrNvwLV5w6wrg7vOdfFCqDQsE2dgCvLBsgrFtLNOkaFvTRIpMSUiMj3UlywVDluO0GbB8E8/Uh/S/QeLJJONuTCXxF7aJw2YIpV3XW5P81zMf5ffkSmbQONLfDMk+bCrDcI8THSuiAgjArjBbbOOR8cg+PpmYKUjc3fWkYbNRD3XcwUgpVx/HcX02KKfEFCyVWVnukZNbQQxlI0XK15UABBgOKQwWxxhfckN6zulMyRImtkD2D09g7OZWOZEwAPh9fIzeqCn4Ber47+FmU3IqG/yRhAur5XZzOImo3jf/wKIdwdiei2ETfcCLKVkqvNW4Z71jgoBQoJ91XpeTSbNHeUJduMvJFTh4KDLDGL89HHtmnMofH0SqoIdjKCwwYnyoJ1tKFCF3Ewonk76xev7VIXShTW9mxmI2yo7nVd4hyhpDvgtNwyPO2G70+XFxjzod3mdbQ18ivawB6ICExeIpj0lzL/yUsVwwmT+6gZVsD1DUE0Tp2tTIFEZr211aAwyQj5GNpSUwcVYCBp4S16iXzFoAJSnK3ihNX8XV/zR0OIT1XqjXooiTFhTRhMKmII4rulT3a/IxidUeFaol9OTcImGMjBZCVv1G6jutsHaNXG8vblNUP7IfV07TeCfugvHewlM1Q3d6y3bvoC5Q9gYUUnNG1ghSuJhaB4sLhphY0RNGiDFoiP7sjq06YY/z3yOH4CiWmCxj9rW4SBfRpcWI4ku82RUc/km/j2A2dHzVqhxYsK/YjnIeFzZkz9PcQxW42yjP4KghUgDtzteNRIdfVhdNq9AQhU+AQSyBHnomSHRSZPRdycxNCuGc6nkklPgwrCF/HYpVthvPiu5pAkKXrJ/VCOtCxAz5TAaABmWW5ATWlZGWNV195RGCkAr4Ot3AuMu1XsLCUukrRQ251GmXYrDD7B/nH35+I6q7I6lKP8YQsdcFTbqsjssTJQyInTv0NbAWg4MNn8e5yaL+FHizKLoH9gLpRagzkMHAFOxAazsIOwaCRCZRSkLRXt8T1cjyY7PigPRenXmCqZppTylXMVt/uRM30BJRfwjoxS0S62zduzlV4YAQ=="
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_015znrkzKT4XCqK6KgX6QuPu",
+          "name": "run_experiment",
+          "input": {
+            "spec": {
+              "seed": 99,
+              "durationMs": 8000,
+              "clients": 8,
+              "readFrom": "any",
+              "readRatio": 0.6,
+              "network": {
+                "minLatencyMs": 1,
+                "maxLatencyMs": 60,
+                "dropRate": 0.02,
+                "duplicateRate": 0.4
+              },
+              "faults": [
+                {
+                  "atMs": 1000,
+                  "action": "pause",
+                  "args": {
+                    "node": "n4",
+                    "durationMs": 700
+                  }
+                },
+                {
+                  "atMs": 1900,
+                  "action": "crash",
+                  "args": {
+                    "node": "n3"
+                  }
+                },
+                {
+                  "atMs": 2400,
+                  "action": "restart",
+                  "args": {
+                    "node": "n3"
+                  }
+                },
+                {
+                  "atMs": 3000,
+                  "action": "partition",
+                  "args": {
+                    "groups": [
+                      [
+                        "n1",
+                        "n3"
+                      ],
+                      [
+                        "n2",
+                        "n4",
+                        "n5"
+                      ]
+                    ]
+                  }
+                },
+                {
+                  "atMs": 4500,
+                  "action": "heal",
+                  "args": {}
+                },
+                {
+                  "atMs": 5000,
+                  "action": "pause",
+                  "args": {
+                    "node": "n2",
+                    "durationMs": 600
+                  }
+                },
+                {
+                  "atMs": 6000,
+                  "action": "crash",
+                  "args": {
+                    "node": "n2"
+                  }
+                },
+                {
+                  "atMs": 6300,
+                  "action": "restart",
+                  "args": {
+                    "node": "n2"
+                  }
+                }
+              ]
+            }
+          },
+          "caller": {
+            "type": "direct"
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "content": "experiment 44a3f68c: target-a, seed 99, 8000 ms, 8 clients, 2 keys, reads 60% from any, op timeout 500 ms\nnetwork: latency 1-60 ms, drop 0.02, duplicate 0.4\nfaults (8): 1000 pause n4 700ms; 1900 crash n3; 2400 restart n3; 3000 partition n1,n3 | n2,n4,n5; 4500 heal; 5000 pause n2 600ms; 6000 crash n2; 6300 restart n2\nverdict: ok (linearizable)\nops: 385 (ok 323, fail 3, info 59; reads 225, writes 160); messages 8631 sent, 601 dropped\nleaders: t1 n1 206-4539; t3 n2 3415-5600; t5 n5 5512-8000\nevents: 7 elections started, 15 votes granted\n  158 n1 election-started t1\n  206 n1 became-leader t1 (log 0, commit 0)\n  1000 n4 pause-start (700ms)\n  1700 n4 pause-end (137 queued)\n  1900 n3 crash\n  2400 n3 restart\n  3000 partition (n1,n3 | n2,n4,n5)\n  3180 n2 election-started t2\n  3189 n4 election-started t2\n  3334 n2 election-started t3\n  3415 n2 became-leader t3 (log 210, commit 206)\n  4500 heal\n  4539 n1 stepped-down t3\n  5000 n2 pause-start (600ms)\n  5245 n4 election-started t4\n  5278 n1 election-started t4\n  5457 n5 election-started t5\n  5512 n5 became-leader t5 (log 286, commit 285)\n  5600 n2 pause-end (87 queued)\n  5600 n2 stepped-down t4\n  6000 n2 crash\n  6300 n2 restart\n\n\nbudget: {\"stepsUsed\":18,\"stepsLeft\":12}",
+          "tool_use_id": "toolu_015znrkzKT4XCqK6KgX6QuPu",
+          "type": "tool_result"
+        }
+      ],
+      "experiments": [
+        {
+          "id": "44a3f68c",
+          "spec": {
+            "seed": 99,
+            "target": "target-a",
+            "durationMs": 8000,
+            "nodes": 5,
+            "clients": 8,
+            "keys": 2,
+            "readRatio": 0.6,
+            "readFrom": "any",
+            "opTimeoutMs": 500,
+            "network": {
+              "minLatencyMs": 1,
+              "maxLatencyMs": 60,
+              "dropRate": 0.02,
+              "duplicateRate": 0.4
+            },
+            "faults": [
+              {
+                "atMs": 1000,
+                "action": "pause",
+                "args": {
+                  "node": "n4",
+                  "durationMs": 700
+                }
+              },
+              {
+                "atMs": 1900,
+                "action": "crash",
+                "args": {
+                  "node": "n3"
+                }
+              },
+              {
+                "atMs": 2400,
+                "action": "restart",
+                "args": {
+                  "node": "n3"
+                }
+              },
+              {
+                "atMs": 3000,
+                "action": "partition",
+                "args": {
+                  "groups": [
+                    [
+                      "n1",
+                      "n3"
+                    ],
+                    [
+                      "n2",
+                      "n4",
+                      "n5"
+                    ]
+                  ]
+                }
+              },
+              {
+                "atMs": 4500,
+                "action": "heal",
+                "args": {}
+              },
+              {
+                "atMs": 5000,
+                "action": "pause",
+                "args": {
+                  "node": "n2",
+                  "durationMs": 600
+                }
+              },
+              {
+                "atMs": 6000,
+                "action": "crash",
+                "args": {
+                  "node": "n2"
+                }
+              },
+              {
+                "atMs": 6300,
+                "action": "restart",
+                "args": {
+                  "node": "n2"
+                }
+              }
+            ]
+          },
+          "verdict": "ok",
+          "ops": 385,
+          "faults": 8,
+          "durationMs": 8000,
+          "shrunkFrom": ""
+        }
+      ]
+    },
+    {
+      "assistant": [
+        {
+          "type": "tool_use",
+          "id": "toolu_01JteqrrwToSVxo7bYZajrkW",
+          "name": "conclude",
+          "input": {
+            "summary": "I found no linearizability violation in target-a, so I can't claim a bug. I ran 17 experiments, all with verdict ok. They covered these cases:\n- Leader isolated, and leader in a minority partition, with reads sent to the leader and to any node.\n- Leader and follower pauses, including a zombie leader resuming after a new election.\n- Crashes and restarts of the leader, of followers, and of a majority at once, plus crashes during elections.\n- Flapping partitions and rolling single-node isolations over 8 s.\n- Drops up to 15%, duplicates up to 40%, and latencies up to 150 ms.\n- High read ratio on a single key, and several seeds (42, 7, 5, 3, 11, 21, 99).\nStale reads from deposed leaders, lost acknowledged writes and duplicate application were all absent from the histories. The checker never reported a violation, and none of the runs came back \"unknown\". The cluster looks correct, or its bug needs a narrower trigger than I tried."
+          },
+          "caller": {
+            "type": "direct"
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "content": "conclusion recorded; the run is over\n\nbudget: {\"stepsUsed\":19,\"stepsLeft\":11}",
+          "tool_use_id": "toolu_01JteqrrwToSVxo7bYZajrkW",
+          "type": "tool_result"
+        }
+      ],
+      "experiments": []
+    }
+  ],
+  "experiments": [
+    {
+      "seed": 42,
+      "target": "target-a",
+      "durationMs": 3000,
+      "nodes": 5,
+      "clients": 4,
+      "keys": 2,
+      "readRatio": 0.5,
+      "readFrom": "leader",
+      "opTimeoutMs": 500,
+      "network": {
+        "minLatencyMs": 1,
+        "maxLatencyMs": 10,
+        "dropRate": 0,
+        "duplicateRate": 0
+      },
+      "faults": [
+        {
+          "atMs": 800,
+          "action": "isolate",
+          "args": {
+            "node": "n1"
+          }
+        },
+        {
+          "atMs": 2200,
+          "action": "heal",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "seed": 42,
+      "target": "target-a",
+      "durationMs": 3000,
+      "nodes": 5,
+      "clients": 4,
+      "keys": 2,
+      "readRatio": 0.5,
+      "readFrom": "any",
+      "opTimeoutMs": 500,
+      "network": {
+        "minLatencyMs": 1,
+        "maxLatencyMs": 10,
+        "dropRate": 0,
+        "duplicateRate": 0
+      },
+      "faults": [
+        {
+          "atMs": 800,
+          "action": "isolate",
+          "args": {
+            "node": "n4"
+          }
+        },
+        {
+          "atMs": 2200,
+          "action": "heal",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "seed": 42,
+      "target": "target-a",
+      "durationMs": 3000,
+      "nodes": 5,
+      "clients": 4,
+      "keys": 2,
+      "readRatio": 0.5,
+      "readFrom": "leader",
+      "opTimeoutMs": 500,
+      "network": {
+        "minLatencyMs": 1,
+        "maxLatencyMs": 10,
+        "dropRate": 0,
+        "duplicateRate": 0
+      },
+      "faults": [
+        {
+          "atMs": 800,
+          "action": "isolate",
+          "args": {
+            "node": "n4"
+          }
+        },
+        {
+          "atMs": 2200,
+          "action": "heal",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "seed": 42,
+      "target": "target-a",
+      "durationMs": 4000,
+      "nodes": 5,
+      "clients": 4,
+      "keys": 2,
+      "readRatio": 0.5,
+      "readFrom": "leader",
+      "opTimeoutMs": 500,
+      "network": {
+        "minLatencyMs": 1,
+        "maxLatencyMs": 10,
+        "dropRate": 0,
+        "duplicateRate": 0
+      },
+      "faults": [
+        {
+          "atMs": 800,
+          "action": "pause",
+          "args": {
+            "node": "n4",
+            "durationMs": 1500
+          }
+        }
+      ]
+    },
+    {
+      "seed": 42,
+      "target": "target-a",
+      "durationMs": 5000,
+      "nodes": 5,
+      "clients": 4,
+      "keys": 2,
+      "readRatio": 0.5,
+      "readFrom": "leader",
+      "opTimeoutMs": 500,
+      "network": {
+        "minLatencyMs": 1,
+        "maxLatencyMs": 40,
+        "dropRate": 0.1,
+        "duplicateRate": 0.1
+      },
+      "faults": [
+        {
+          "atMs": 700,
+          "action": "crash",
+          "args": {
+            "node": "n4"
+          }
+        },
+        {
+          "atMs": 1200,
+          "action": "restart",
+          "args": {
+            "node": "n4"
+          }
+        },
+        {
+          "atMs": 2000,
+          "action": "crash",
+          "args": {
+            "node": "n3"
+          }
+        },
+        {
+          "atMs": 2300,
+          "action": "crash",
+          "args": {
+            "node": "n5"
+          }
+        },
+        {
+          "atMs": 2800,
+          "action": "restart",
+          "args": {
+            "node": "n3"
+          }
+        },
+        {
+          "atMs": 2900,
+          "action": "restart",
+          "args": {
+            "node": "n5"
+          }
+        }
+      ]
+    },
+    {
+      "seed": 42,
+      "target": "target-a",
+      "durationMs": 6000,
+      "nodes": 5,
+      "clients": 6,
+      "keys": 2,
+      "readRatio": 0.5,
+      "readFrom": "any",
+      "opTimeoutMs": 500,
+      "network": {
+        "minLatencyMs": 1,
+        "maxLatencyMs": 30,
+        "dropRate": 0.05,
+        "duplicateRate": 0.05
+      },
+      "faults": [
+        {
+          "atMs": 500,
+          "action": "partition",
+          "args": {
+            "groups": [
+              [
+                "n4",
+                "n1"
+              ],
+              [
+                "n2",
+                "n3",
+                "n5"
+              ]
+            ]
+          }
+        },
+        {
+          "atMs": 1500,
+          "action": "heal",
+          "args": {}
+        },
+        {
+          "atMs": 2000,
+          "action": "partition",
+          "args": {
+            "groups": [
+              [
+                "n5",
+                "n2"
+              ],
+              [
+                "n1",
+                "n3",
+                "n4"
+              ]
+            ]
+          }
+        },
+        {
+          "atMs": 3000,
+          "action": "heal",
+          "args": {}
+        },
+        {
+          "atMs": 3500,
+          "action": "isolate",
+          "args": {
+            "node": "n3"
+          }
+        },
+        {
+          "atMs": 4500,
+          "action": "heal",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "seed": 42,
+      "target": "target-a",
+      "durationMs": 5000,
+      "nodes": 5,
+      "clients": 4,
+      "keys": 2,
+      "readRatio": 0.5,
+      "readFrom": "leader",
+      "opTimeoutMs": 500,
+      "network": {
+        "minLatencyMs": 1,
+        "maxLatencyMs": 10,
+        "dropRate": 0,
+        "duplicateRate": 0
+      },
+      "faults": [
+        {
+          "atMs": 1000,
+          "action": "crash",
+          "args": {
+            "node": "n4"
+          }
+        },
+        {
+          "atMs": 1000,
+          "action": "crash",
+          "args": {
+            "node": "n1"
+          }
+        },
+        {
+          "atMs": 1000,
+          "action": "crash",
+          "args": {
+            "node": "n2"
+          }
+        },
+        {
+          "atMs": 1500,
+          "action": "restart",
+          "args": {
+            "node": "n4"
+          }
+        },
+        {
+          "atMs": 1500,
+          "action": "restart",
+          "args": {
+            "node": "n1"
+          }
+        },
+        {
+          "atMs": 1500,
+          "action": "restart",
+          "args": {
+            "node": "n2"
+          }
+        },
+        {
+          "atMs": 2500,
+          "action": "crash",
+          "args": {
+            "node": "n3"
+          }
+        },
+        {
+          "atMs": 2500,
+          "action": "crash",
+          "args": {
+            "node": "n5"
+          }
+        },
+        {
+          "atMs": 3000,
+          "action": "restart",
+          "args": {
+            "node": "n3"
+          }
+        },
+        {
+          "atMs": 3000,
+          "action": "restart",
+          "args": {
+            "node": "n5"
+          }
+        }
+      ]
+    },
+    {
+      "seed": 42,
+      "target": "target-a",
+      "durationMs": 5000,
+      "nodes": 5,
+      "clients": 8,
+      "keys": 2,
+      "readRatio": 0.7,
+      "readFrom": "any",
+      "opTimeoutMs": 500,
+      "network": {
+        "minLatencyMs": 1,
+        "maxLatencyMs": 80,
+        "dropRate": 0,
+        "duplicateRate": 0
+      },
+      "faults": [
+        {
+          "atMs": 800,
+          "action": "pause",
+          "args": {
+            "node": "n4",
+            "durationMs": 800
+          }
+        },
+        {
+          "atMs": 2000,
+          "action": "pause",
+          "args": {
+            "node": "n3",
+            "durationMs": 800
+          }
+        },
+        {
+          "atMs": 3000,
+          "action": "isolate",
+          "args": {
+            "node": "n1"
+          }
+        },
+        {
+          "atMs": 3800,
+          "action": "heal",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "seed": 7,
+      "target": "target-a",
+      "durationMs": 6000,
+      "nodes": 5,
+      "clients": 6,
+      "keys": 2,
+      "readRatio": 0.5,
+      "readFrom": "leader",
+      "opTimeoutMs": 500,
+      "network": {
+        "minLatencyMs": 1,
+        "maxLatencyMs": 50,
+        "dropRate": 0.15,
+        "duplicateRate": 0.3
+      },
+      "faults": [
+        {
+          "atMs": 1000,
+          "action": "isolate",
+          "args": {
+            "node": "n4"
+          }
+        },
+        {
+          "atMs": 2000,
+          "action": "heal",
+          "args": {}
+        },
+        {
+          "atMs": 2500,
+          "action": "isolate",
+          "args": {
+            "node": "n3"
+          }
+        },
+        {
+          "atMs": 3500,
+          "action": "heal",
+          "args": {}
+        },
+        {
+          "atMs": 4000,
+          "action": "crash",
+          "args": {
+            "node": "n1"
+          }
+        },
+        {
+          "atMs": 4500,
+          "action": "restart",
+          "args": {
+            "node": "n1"
+          }
+        }
+      ]
+    },
+    {
+      "seed": 42,
+      "target": "target-a",
+      "durationMs": 4000,
+      "nodes": 5,
+      "clients": 6,
+      "keys": 2,
+      "readRatio": 0.5,
+      "readFrom": "leader",
+      "opTimeoutMs": 500,
+      "network": {
+        "minLatencyMs": 1,
+        "maxLatencyMs": 10,
+        "dropRate": 0,
+        "duplicateRate": 0
+      },
+      "faults": [
+        {
+          "atMs": 300,
+          "action": "partition",
+          "args": {
+            "groups": [
+              [
+                "n4"
+              ],
+              [
+                "n1",
+                "n2",
+                "n3",
+                "n5"
+              ]
+            ]
+          }
+        },
+        {
+          "atMs": 700,
+          "action": "heal",
+          "args": {}
+        },
+        {
+          "atMs": 1000,
+          "action": "partition",
+          "args": {
+            "groups": [
+              [
+                "n4",
+                "n1"
+              ],
+              [
+                "n2",
+                "n3",
+                "n5"
+              ]
+            ]
+          }
+        },
+        {
+          "atMs": 1300,
+          "action": "heal",
+          "args": {}
+        },
+        {
+          "atMs": 1600,
+          "action": "pause",
+          "args": {
+            "node": "n4",
+            "durationMs": 300
+          }
+        },
+        {
+          "atMs": 2000,
+          "action": "pause",
+          "args": {
+            "node": "n4",
+            "durationMs": 300
+          }
+        },
+        {
+          "atMs": 2400,
+          "action": "isolate",
+          "args": {
+            "node": "n4"
+          }
+        },
+        {
+          "atMs": 2600,
+          "action": "heal",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "seed": 42,
+      "target": "target-a",
+      "durationMs": 4000,
+      "nodes": 5,
+      "clients": 6,
+      "keys": 2,
+      "readRatio": 0.5,
+      "readFrom": "any",
+      "opTimeoutMs": 500,
+      "network": {
+        "minLatencyMs": 1,
+        "maxLatencyMs": 10,
+        "dropRate": 0,
+        "duplicateRate": 0
+      },
+      "faults": [
+        {
+          "atMs": 600,
+          "action": "isolate",
+          "args": {
+            "node": "n1"
+          }
+        },
+        {
+          "atMs": 1800,
+          "action": "isolate",
+          "args": {
+            "node": "n2"
+          }
+        },
+        {
+          "atMs": 3000,
+          "action": "heal",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "seed": 11,
+      "target": "target-a",
+      "durationMs": 8000,
+      "nodes": 5,
+      "clients": 6,
+      "keys": 2,
+      "readRatio": 0.5,
+      "readFrom": "leader",
+      "opTimeoutMs": 500,
+      "network": {
+        "minLatencyMs": 1,
+        "maxLatencyMs": 25,
+        "dropRate": 0.05,
+        "duplicateRate": 0
+      },
+      "faults": [
+        {
+          "atMs": 800,
+          "action": "crash",
+          "args": {
+            "node": "n4"
+          }
+        },
+        {
+          "atMs": 1100,
+          "action": "restart",
+          "args": {
+            "node": "n4"
+          }
+        },
+        {
+          "atMs": 1800,
+          "action": "crash",
+          "args": {
+            "node": "n4"
+          }
+        },
+        {
+          "atMs": 1810,
+          "action": "crash",
+          "args": {
+            "node": "n3"
+          }
+        },
+        {
+          "atMs": 2300,
+          "action": "restart",
+          "args": {
+            "node": "n4"
+          }
+        },
+        {
+          "atMs": 2400,
+          "action": "restart",
+          "args": {
+            "node": "n3"
+          }
+        },
+        {
+          "atMs": 3200,
+          "action": "partition",
+          "args": {
+            "groups": [
+              [
+                "n1",
+                "n2"
+              ],
+              [
+                "n3",
+                "n4",
+                "n5"
+              ]
+            ]
+          }
+        },
+        {
+          "atMs": 4200,
+          "action": "crash",
+          "args": {
+            "node": "n5"
+          }
+        },
+        {
+          "atMs": 4300,
+          "action": "heal",
+          "args": {}
+        },
+        {
+          "atMs": 5000,
+          "action": "restart",
+          "args": {
+            "node": "n5"
+          }
+        },
+        {
+          "atMs": 5500,
+          "action": "crash",
+          "args": {
+            "node": "n1"
+          }
+        },
+        {
+          "atMs": 5500,
+          "action": "crash",
+          "args": {
+            "node": "n2"
+          }
+        },
+        {
+          "atMs": 6200,
+          "action": "restart",
+          "args": {
+            "node": "n1"
+          }
+        },
+        {
+          "atMs": 6200,
+          "action": "restart",
+          "args": {
+            "node": "n2"
+          }
+        }
+      ]
+    },
+    {
+      "seed": 5,
+      "target": "target-a",
+      "durationMs": 4000,
+      "nodes": 5,
+      "clients": 8,
+      "keys": 1,
+      "readRatio": 0.8,
+      "readFrom": "leader",
+      "opTimeoutMs": 500,
+      "network": {
+        "minLatencyMs": 1,
+        "maxLatencyMs": 10,
+        "dropRate": 0,
+        "duplicateRate": 0
+      },
+      "faults": [
+        {
+          "atMs": 800,
+          "action": "partition",
+          "args": {
+            "groups": [
+              [
+                "n4",
+                "n1"
+              ],
+              [
+                "n2",
+                "n3",
+                "n5"
+              ]
+            ]
+          }
+        },
+        {
+          "atMs": 2500,
+          "action": "heal",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "seed": 5,
+      "target": "target-a",
+      "durationMs": 4000,
+      "nodes": 5,
+      "clients": 8,
+      "keys": 1,
+      "readRatio": 0.8,
+      "readFrom": "any",
+      "opTimeoutMs": 500,
+      "network": {
+        "minLatencyMs": 1,
+        "maxLatencyMs": 10,
+        "dropRate": 0,
+        "duplicateRate": 0
+      },
+      "faults": [
+        {
+          "atMs": 800,
+          "action": "partition",
+          "args": {
+            "groups": [
+              [
+                "n3",
+                "n1"
+              ],
+              [
+                "n2",
+                "n4",
+                "n5"
+              ]
+            ]
+          }
+        },
+        {
+          "atMs": 2500,
+          "action": "heal",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "seed": 3,
+      "target": "target-a",
+      "durationMs": 8000,
+      "nodes": 5,
+      "clients": 6,
+      "keys": 2,
+      "readRatio": 0.5,
+      "readFrom": "leader",
+      "opTimeoutMs": 1000,
+      "network": {
+        "minLatencyMs": 20,
+        "maxLatencyMs": 150,
+        "dropRate": 0.05,
+        "duplicateRate": 0.05
+      },
+      "faults": [
+        {
+          "atMs": 1000,
+          "action": "isolate",
+          "args": {
+            "node": "n4"
+          }
+        },
+        {
+          "atMs": 2500,
+          "action": "heal",
+          "args": {}
+        },
+        {
+          "atMs": 2600,
+          "action": "crash",
+          "args": {
+            "node": "n4"
+          }
+        },
+        {
+          "atMs": 3500,
+          "action": "restart",
+          "args": {
+            "node": "n4"
+          }
+        },
+        {
+          "atMs": 4000,
+          "action": "partition",
+          "args": {
+            "groups": [
+              [
+                "n1",
+                "n2",
+                "n3"
+              ],
+              [
+                "n4",
+                "n5"
+              ]
+            ]
+          }
+        },
+        {
+          "atMs": 5500,
+          "action": "heal",
+          "args": {}
+        },
+        {
+          "atMs": 6000,
+          "action": "pause",
+          "args": {
+            "node": "n1",
+            "durationMs": 1200
+          }
+        }
+      ]
+    },
+    {
+      "seed": 21,
+      "target": "target-a",
+      "durationMs": 8000,
+      "nodes": 5,
+      "clients": 8,
+      "keys": 2,
+      "readRatio": 0.5,
+      "readFrom": "leader",
+      "opTimeoutMs": 500,
+      "network": {
+        "minLatencyMs": 1,
+        "maxLatencyMs": 20,
+        "dropRate": 0,
+        "duplicateRate": 0
+      },
+      "faults": [
+        {
+          "atMs": 600,
+          "action": "isolate",
+          "args": {
+            "node": "n4"
+          }
+        },
+        {
+          "atMs": 1300,
+          "action": "heal",
+          "args": {}
+        },
+        {
+          "atMs": 1800,
+          "action": "isolate",
+          "args": {
+            "node": "n1"
+          }
+        },
+        {
+          "atMs": 2500,
+          "action": "heal",
+          "args": {}
+        },
+        {
+          "atMs": 3000,
+          "action": "isolate",
+          "args": {
+            "node": "n2"
+          }
+        },
+        {
+          "atMs": 3700,
+          "action": "heal",
+          "args": {}
+        },
+        {
+          "atMs": 4200,
+          "action": "isolate",
+          "args": {
+            "node": "n3"
+          }
+        },
+        {
+          "atMs": 4900,
+          "action": "heal",
+          "args": {}
+        },
+        {
+          "atMs": 5400,
+          "action": "isolate",
+          "args": {
+            "node": "n5"
+          }
+        },
+        {
+          "atMs": 6100,
+          "action": "heal",
+          "args": {}
+        },
+        {
+          "atMs": 6600,
+          "action": "isolate",
+          "args": {
+            "node": "n4"
+          }
+        },
+        {
+          "atMs": 7300,
+          "action": "heal",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "seed": 99,
+      "target": "target-a",
+      "durationMs": 8000,
+      "nodes": 5,
+      "clients": 8,
+      "keys": 2,
+      "readRatio": 0.6,
+      "readFrom": "any",
+      "opTimeoutMs": 500,
+      "network": {
+        "minLatencyMs": 1,
+        "maxLatencyMs": 60,
+        "dropRate": 0.02,
+        "duplicateRate": 0.4
+      },
+      "faults": [
+        {
+          "atMs": 1000,
+          "action": "pause",
+          "args": {
+            "node": "n4",
+            "durationMs": 700
+          }
+        },
+        {
+          "atMs": 1900,
+          "action": "crash",
+          "args": {
+            "node": "n3"
+          }
+        },
+        {
+          "atMs": 2400,
+          "action": "restart",
+          "args": {
+            "node": "n3"
+          }
+        },
+        {
+          "atMs": 3000,
+          "action": "partition",
+          "args": {
+            "groups": [
+              [
+                "n1",
+                "n3"
+              ],
+              [
+                "n2",
+                "n4",
+                "n5"
+              ]
+            ]
+          }
+        },
+        {
+          "atMs": 4500,
+          "action": "heal",
+          "args": {}
+        },
+        {
+          "atMs": 5000,
+          "action": "pause",
+          "args": {
+            "node": "n2",
+            "durationMs": 600
+          }
+        },
+        {
+          "atMs": 6000,
+          "action": "crash",
+          "args": {
+            "node": "n2"
+          }
+        },
+        {
+          "atMs": 6300,
+          "action": "restart",
+          "args": {
+            "node": "n2"
+          }
+        }
+      ]
+    }
+  ],
+  "finding": null,
+  "conclusion": "I found no linearizability violation in target-a, so I can't claim a bug. I ran 17 experiments, all with verdict ok. They covered these cases:\n- Leader isolated, and leader in a minority partition, with reads sent to the leader and to any node.\n- Leader and follower pauses, including a zombie leader resuming after a new election.\n- Crashes and restarts of the leader, of followers, and of a majority at once, plus crashes during elections.\n- Flapping partitions and rolling single-node isolations over 8 s.\n- Drops up to 15%, duplicates up to 40%, and latencies up to 150 ms.\n- High read ratio on a single key, and several seeds (42, 7, 5, 3, 11, 21, 99).\nStale reads from deposed leaders, lost acknowledged writes and duplicate application were all absent from the histories. The checker never reported a violation, and none of the runs came back \"unknown\". The cluster looks correct, or its bug needs a narrower trigger than I tried.",
+  "revealedBug": "none",
+  "usage": {
+    "inputTokens": 40,
+    "outputTokens": 6807,
+    "cacheReadTokens": 183478,
+    "cacheCreationTokens": 16710
+  },
+  "historyHashes": {
+    "0f426164": "0b687b87ac2871d4",
+    "1471f05c": "776bfefa3e6fe244",
+    "1e48f459": "cf5995d96c64c14b",
+    "3611e459": "7d21cab964d6aa49",
+    "3bb7af9c": "846e6345ed293872",
+    "44a3f68c": "9526b08157749b3c",
+    "4a4091d6": "f7951fc4757316c9",
+    "6e57591a": "c7c9020795c9771b",
+    "7cfd5858": "36a796d6ba11b6a0",
+    "8e1b20ba": "adea4654d4217804",
+    "923734da": "ec38b9d60a9c69a1",
+    "b020e22c": "1a1ec10f8be9e6ab",
+    "b2fa3e8c": "20c5bf17992bd0d0",
+    "c34f58e8": "c504410fe71c70ee",
+    "c7c3487d": "cab9c3dbc36ae0a8",
+    "ec675a82": "e2782e0b196f479d",
+    "f14b6a98": "9376b1063bca35f2"
+  }
+}

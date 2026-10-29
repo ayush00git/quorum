@@ -1,0 +1,653 @@
+{
+  "version": 1,
+  "target": "target-b",
+  "model": "claude-sonnet-5-5",
+  "startedAt": "2026-10-29T11:24:10Z",
+  "steps": [
+    {
+      "assistant": [
+        {
+          "type": "tool_use",
+          "id": "toolu_01HQZwXXeSQxtc1K239wfHkk",
+          "name": "cluster_info",
+          "input": {},
+          "caller": {
+            "type": "direct"
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "content": "target: target-b\nnodes: n1 n2 n3 n4 n5\ndefault spec: {\"seed\":0,\"target\":\"target-b\",\"durationMs\":3000,\"nodes\":5,\"clients\":4,\"keys\":2,\"readRatio\":0.5,\"readFrom\":\"leader\",\"opTimeoutMs\":500,\"network\":{\"minLatencyMs\":1,\"maxLatencyMs\":10,\"dropRate\":0,\"duplicateRate\":0},\"faults\":[]}\nlimits: durationMs \u003c= 10000, faults \u003c= 30, inspect output \u003c= 60 lines\nfault actions (faults: [{atMs, action, args}]):\n  partition {\"groups\":[[\"n1\",\"n2\"],[\"n3\",\"n4\",\"n5\"]]}: split the network into groups; messages between groups are dropped, including in-flight ones\n  isolate {\"node\":\"n1\"}: cut one node off from all others\n  heal {}: remove every partition\n  crash {\"node\":\"n1\"}: crash a node: volatile state is lost, whatever it persisted to disk survives\n  restart {\"node\":\"n1\"}: restart a crashed node from its disk\n  pause {\"node\":\"n1\",\"durationMs\":400}: freeze a node (GC-style): it processes nothing, messages queue and timers fire late, then it resumes\n  setNetwork {\"minLatencyMs\":1,\"maxLatencyMs\":80,\"dropRate\":0.1,\"duplicateRate\":0.05}: change the network model from this time on; every field is optional\nworkload: each client process has at most one outstanding op; ops are reads and writes on keys x, y, z, ...; write values are unique per key. Clients follow leader hints and retry. An op that times out is indeterminate (status info) and its process retires; status fail means the op definitely did not take effect.\nchecker: per-key linearizability of the recorded history; verdict ok, violation or unknown (checker timeout).\n\nbudget: {\"stepsUsed\":1,\"stepsLeft\":29}",
+          "tool_use_id": "toolu_01HQZwXXeSQxtc1K239wfHkk",
+          "type": "tool_result"
+        }
+      ],
+      "experiments": []
+    },
+    {
+      "assistant": [
+        {
+          "type": "text",
+          "text": "Hypothesis: isolating the leader while clients keep reading from it exposes stale reads. First, a baseline to find the leader."
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_01AeDL6vqKZNsNqcZgckSHZJ",
+          "name": "run_experiment",
+          "input": {
+            "spec": {
+              "seed": 42,
+              "faults": []
+            }
+          },
+          "caller": {
+            "type": "direct"
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "content": "experiment 81aa7166: target-b, seed 42, 3000 ms, 4 clients, 2 keys, reads 50% from leader, op timeout 500 ms\nnetwork: latency 1-10 ms, drop 0, duplicate 0\nfaults: none\nverdict: ok (linearizable)\nops: 550 (ok 538, fail 9, info 3; reads 268, writes 282); messages 4787 sent, 0 dropped\nleaders: t1 n4 201-3000\nevents: 1 elections started, 4 votes granted\n  194 n4 election-started t1\n  201 n4 became-leader t1 (log 0, commit 0)\n\n\nbudget: {\"stepsUsed\":2,\"stepsLeft\":28}",
+          "tool_use_id": "toolu_01AeDL6vqKZNsNqcZgckSHZJ",
+          "type": "tool_result"
+        }
+      ],
+      "experiments": [
+        {
+          "id": "81aa7166",
+          "spec": {
+            "seed": 42,
+            "target": "target-b",
+            "durationMs": 3000,
+            "nodes": 5,
+            "clients": 4,
+            "keys": 2,
+            "readRatio": 0.5,
+            "readFrom": "leader",
+            "opTimeoutMs": 500,
+            "network": {
+              "minLatencyMs": 1,
+              "maxLatencyMs": 10,
+              "dropRate": 0,
+              "duplicateRate": 0
+            },
+            "faults": []
+          },
+          "verdict": "ok",
+          "ops": 550,
+          "faults": 0,
+          "durationMs": 3000,
+          "shrunkFrom": ""
+        }
+      ]
+    },
+    {
+      "assistant": [
+        {
+          "type": "text",
+          "text": "Leader n4. Isolate it at 1000ms, and heal later."
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_01KGHadWzpm6E6TZDZ65CQyH",
+          "name": "run_experiment",
+          "input": {
+            "spec": {
+              "seed": 42,
+              "durationMs": 4000,
+              "faults": [
+                {
+                  "atMs": 1000,
+                  "action": "isolate",
+                  "args": {
+                    "node": "n4"
+                  }
+                },
+                {
+                  "atMs": 3000,
+                  "action": "heal",
+                  "args": {}
+                }
+              ]
+            }
+          },
+          "caller": {
+            "type": "direct"
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "content": "experiment 25c8b6d0: target-b, seed 42, 4000 ms, 4 clients, 2 keys, reads 50% from leader, op timeout 500 ms\nnetwork: latency 1-10 ms, drop 0, duplicate 0\nfaults (2): 1000 isolate n4; 3000 heal\nverdict: ok (linearizable)\nops: 660 (ok 643, fail 9, info 8; reads 350, writes 310); messages 5318 sent, 351 dropped\nleaders: t1 n4 201-3006; t2 n2 1159-4000\nevents: 2 elections started, 7 votes granted\n  194 n4 election-started t1\n  201 n4 became-leader t1 (log 0, commit 0)\n  1000 partition (n4 | n1,n2,n3,n5)\n  1146 n2 election-started t2\n  1159 n2 became-leader t2 (log 76, commit 75)\n  3000 heal\n  3006 n4 stepped-down t2\n\n\nbudget: {\"stepsUsed\":3,\"stepsLeft\":27}",
+          "tool_use_id": "toolu_01KGHadWzpm6E6TZDZ65CQyH",
+          "type": "tool_result"
+        }
+      ],
+      "experiments": [
+        {
+          "id": "25c8b6d0",
+          "spec": {
+            "seed": 42,
+            "target": "target-b",
+            "durationMs": 4000,
+            "nodes": 5,
+            "clients": 4,
+            "keys": 2,
+            "readRatio": 0.5,
+            "readFrom": "leader",
+            "opTimeoutMs": 500,
+            "network": {
+              "minLatencyMs": 1,
+              "maxLatencyMs": 10,
+              "dropRate": 0,
+              "duplicateRate": 0
+            },
+            "faults": [
+              {
+                "atMs": 1000,
+                "action": "isolate",
+                "args": {
+                  "node": "n4"
+                }
+              },
+              {
+                "atMs": 3000,
+                "action": "heal",
+                "args": {}
+              }
+            ]
+          },
+          "verdict": "ok",
+          "ops": 660,
+          "faults": 2,
+          "durationMs": 4000,
+          "shrunkFrom": ""
+        }
+      ]
+    },
+    {
+      "assistant": [
+        {
+          "type": "thinking",
+          "thinking": "",
+          "signature": "CAQSrAUKEAgTGAI4AUIIdGhpbmtpbmcSDGGX0Fdg09mVRZTxhhoM7noxkHj6LEE1YdOxIjDD2pIuQUGT5p2/GHKY4C2swBh6+YKjMqfXJVPAjSr5z6cJMxPEucH6fKN6jmXX3p4qyQSlTmnlOzMzMiF34w0bfSFRUPKYrDJOz6A4Ldk/U979Dskvejt54GTP5yqHKvj2yKUEjZ4pAOI57AmQ8P5I5giJ3QIbPg5BicTVQNukR23zSYSCq+TpDBvATCNShPOImVMkZH/GQpv1EXFEh6SaJT4578Q+qGr3OGmsAIxKdGhJRJMR785wc1mCbfg+gLuB/F/a5kv8Lz9reH6LPaKJaLALnWyC3O+E/dOkxd3gkDhW3A22VJ31bUA00QjajpQLO2VJJYHD3cTnntefiLEFy30SKXbdhqr7uWX9TN8c2YVNF0xXxunetAKiYgLPvl35lRiXCtHRvDjoRtjZM+ZUnizIfWAt2pu6Wcu00/R9VoRwxrx7N8sB6qyxctDvkhS+8kGz6TZTYNaMsSBBYLI5MUQ8D/E521eL9giBxNrO4TUHpABm72fqH/ygXxWyeNAhjptMwbAbZFSN7eqb6T0BuuCNZRFBX7aOiuwVCI27iJkTgAWBnnnzC1MQ50wB2TRXu1heNQnBgdqO7BXXdNdHFHE9V2GaKEW9edgz7+JmCfGORKeiW0Y/OpZNMyAaeBgcawdY+FkhMFC0Y4FwUUhTbU73sd7NXVudh7IaWkIiNvYShSIkJpD7QxibHm8KpMvcgU4Q8YjHRsZbssWbXsOt2aJWOc850vyRoTzWGfsFaGclTVxiQJSCK0MAiR/jUXJRe2QDb7XKfPebplJaaKucdb3gl51JSf7kp7c6BjSTWk3WWFlO8gjDZm1yzf3BPjzRKCk1ILIlxWKprsUYAQ=="
+        },
+        {
+          "type": "text",
+          "text": "Hypothesis: with reads from any node, followers may serve stale reads."
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_01Hp7J6XgdRG6iTX9fyxHRs1",
+          "name": "run_experiment",
+          "input": {
+            "spec": {
+              "seed": 42,
+              "durationMs": 4000,
+              "readFrom": "any",
+              "clients": 6,
+              "faults": [
+                {
+                  "atMs": 1000,
+                  "action": "isolate",
+                  "args": {
+                    "node": "n4"
+                  }
+                },
+                {
+                  "atMs": 3000,
+                  "action": "heal",
+                  "args": {}
+                }
+              ]
+            }
+          },
+          "caller": {
+            "type": "direct"
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "content": "experiment 59c9a23b: target-b, seed 42, 4000 ms, 6 clients, 2 keys, reads 50% from any, op timeout 500 ms\nnetwork: latency 1-10 ms, drop 0, duplicate 0\nfaults (2): 1000 isolate n4; 3000 heal\nverdict: VIOLATION (not linearizable) on key x\nops: 821 (ok 796, fail 15, info 10; reads 418, writes 403); messages 7313 sent, 392 dropped\nleaders: t1 n4 206-3004; t2 n2 1156-4000\nevents: 2 elections started, 7 votes granted\n  194 n4 election-started t1\n  206 n4 became-leader t1 (log 0, commit 0)\n  1000 partition (n4 | n1,n2,n3,n5)\n  1145 n2 election-started t2\n  1156 n2 became-leader t2 (log 103, commit 102)\n  3000 heal\n  3004 n4 stepped-down t2\nexplanation: read(x) by p7 returned 56 at 1565 ms, but write(x, 61) by p6 completed at 1534 ms, after write(x, 56) by p3 completed at 996 ms, and no later write set x back to 56.\noffending ops (* cannot be linearized): 3\n    #190 p3 w(x,56) [971..996] n4 ok\n    #207 p6 w(x,61) [1493..1534] n2 ok\n  * #215 p7 r(x)-\u003e56 [1547..1565] n4 ok\n\n\nbudget: {\"stepsUsed\":4,\"stepsLeft\":26}",
+          "tool_use_id": "toolu_01Hp7J6XgdRG6iTX9fyxHRs1",
+          "type": "tool_result"
+        }
+      ],
+      "experiments": [
+        {
+          "id": "59c9a23b",
+          "spec": {
+            "seed": 42,
+            "target": "target-b",
+            "durationMs": 4000,
+            "nodes": 5,
+            "clients": 6,
+            "keys": 2,
+            "readRatio": 0.5,
+            "readFrom": "any",
+            "opTimeoutMs": 500,
+            "network": {
+              "minLatencyMs": 1,
+              "maxLatencyMs": 10,
+              "dropRate": 0,
+              "duplicateRate": 0
+            },
+            "faults": [
+              {
+                "atMs": 1000,
+                "action": "isolate",
+                "args": {
+                  "node": "n4"
+                }
+              },
+              {
+                "atMs": 3000,
+                "action": "heal",
+                "args": {}
+              }
+            ]
+          },
+          "verdict": "violation",
+          "ops": 821,
+          "faults": 2,
+          "durationMs": 4000,
+          "shrunkFrom": ""
+        }
+      ]
+    },
+    {
+      "assistant": [
+        {
+          "type": "tool_use",
+          "id": "toolu_01Da5yratrKXyMTKifzsjgwD",
+          "name": "shrink",
+          "input": {
+            "experimentId": "59c9a23b"
+          },
+          "caller": {
+            "type": "direct"
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "content": "shrunk 59c9a23b to experiment 39ea2d21 in 15 runs (faults 2-\u003e1, durationMs 4000-\u003e1587, clients 6-\u003e4, keys 2-\u003e1)\nminimal spec: {\"seed\":42,\"target\":\"target-b\",\"durationMs\":1587,\"nodes\":5,\"clients\":4,\"keys\":1,\"readRatio\":0.5,\"readFrom\":\"any\",\"opTimeoutMs\":500,\"network\":{\"minLatencyMs\":1,\"maxLatencyMs\":10,\"dropRate\":0,\"duplicateRate\":0},\"faults\":[{\"atMs\":1000,\"action\":\"isolate\",\"args\":{\"node\":\"n4\"}}]}\nexperiment 39ea2d21: target-b, seed 42, 1587 ms, 4 clients, 1 keys, reads 50% from any, op timeout 500 ms\nnetwork: latency 1-10 ms, drop 0, duplicate 0\nfaults (1): 1000 isolate n4\nverdict: VIOLATION (not linearizable) on key x\nops: 146 (ok 130, fail 10, info 6; reads 57, writes 89); messages 1565 sent, 81 dropped\nleaders: t1 n4 206-1587; t2 n3 1197-1587\nevents: 2 elections started, 7 votes granted\n  194 n4 election-started t1\n  206 n4 became-leader t1 (log 0, commit 0)\n  1000 partition (n4 | n1,n2,n3,n5)\n  1186 n3 election-started t2\n  1197 n3 became-leader t2 (log 72, commit 71)\nexplanation: read(x) by p5 returned 76 at 1545 ms, but write(x, 82) by p5 completed at 1532 ms, after write(x, 76) by p0 completed at 979 ms, and no later write set x back to 76.\noffending ops (* cannot be linearized): 3\n    #123 p0 w(x,76) [959..979] n4 ok\n    #133 p5 w(x,82) [1503..1532] n3 ok\n  * #138 p5 r(x)-\u003e76 [1536..1545] n4 ok\n\n\nbudget: {\"stepsUsed\":5,\"stepsLeft\":25}",
+          "tool_use_id": "toolu_01Da5yratrKXyMTKifzsjgwD",
+          "type": "tool_result"
+        }
+      ],
+      "experiments": [
+        {
+          "id": "39ea2d21",
+          "spec": {
+            "seed": 42,
+            "target": "target-b",
+            "durationMs": 1587,
+            "nodes": 5,
+            "clients": 4,
+            "keys": 1,
+            "readRatio": 0.5,
+            "readFrom": "any",
+            "opTimeoutMs": 500,
+            "network": {
+              "minLatencyMs": 1,
+              "maxLatencyMs": 10,
+              "dropRate": 0,
+              "duplicateRate": 0
+            },
+            "faults": [
+              {
+                "atMs": 1000,
+                "action": "isolate",
+                "args": {
+                  "node": "n4"
+                }
+              }
+            ]
+          },
+          "verdict": "violation",
+          "ops": 146,
+          "faults": 1,
+          "durationMs": 1587,
+          "shrunkFrom": "59c9a23b"
+        }
+      ]
+    },
+    {
+      "assistant": [
+        {
+          "type": "tool_use",
+          "id": "toolu_01VWDvspEHVKdG1PEBRtZjQz",
+          "name": "report_finding",
+          "input": {
+            "experimentId": "39ea2d21",
+            "title": "Stale read from isolated old leader (no read-lease/quorum check)",
+            "anomaly": "p5 read x-\u003e76 from n4 at 1545ms, after write(x,82) completed at 1532ms on the new leader n3. Write 76 was the last value before that, so the read is stale and cannot be linearized.",
+            "causalChain": [
+              "t=206 n4 becomes leader of term 1",
+              "t=1000 n4 isolated from all other nodes",
+              "t=1186-1197 n3 wins election in term 2 on the majority side",
+              "t=1503-1532 write(x,82) commits via n3",
+              "t=1536-1545 read(x) sent to n4, which still believes it leads, and it answers locally with 76 without confirming leadership with a quorum",
+              "result: stale read, not linearizable"
+            ]
+          },
+          "caller": {
+            "type": "direct"
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "content": "finding recorded for experiment 39ea2d21; the run is over\n\nbudget: {\"stepsUsed\":6,\"stepsLeft\":24}",
+          "tool_use_id": "toolu_01VWDvspEHVKdG1PEBRtZjQz",
+          "type": "tool_result"
+        }
+      ],
+      "experiments": []
+    }
+  ],
+  "experiments": [
+    {
+      "seed": 42,
+      "target": "target-b",
+      "durationMs": 3000,
+      "nodes": 5,
+      "clients": 4,
+      "keys": 2,
+      "readRatio": 0.5,
+      "readFrom": "leader",
+      "opTimeoutMs": 500,
+      "network": {
+        "minLatencyMs": 1,
+        "maxLatencyMs": 10,
+        "dropRate": 0,
+        "duplicateRate": 0
+      },
+      "faults": []
+    },
+    {
+      "seed": 42,
+      "target": "target-b",
+      "durationMs": 4000,
+      "nodes": 5,
+      "clients": 4,
+      "keys": 2,
+      "readRatio": 0.5,
+      "readFrom": "leader",
+      "opTimeoutMs": 500,
+      "network": {
+        "minLatencyMs": 1,
+        "maxLatencyMs": 10,
+        "dropRate": 0,
+        "duplicateRate": 0
+      },
+      "faults": [
+        {
+          "atMs": 1000,
+          "action": "isolate",
+          "args": {
+            "node": "n4"
+          }
+        },
+        {
+          "atMs": 3000,
+          "action": "heal",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "seed": 42,
+      "target": "target-b",
+      "durationMs": 4000,
+      "nodes": 5,
+      "clients": 6,
+      "keys": 2,
+      "readRatio": 0.5,
+      "readFrom": "any",
+      "opTimeoutMs": 500,
+      "network": {
+        "minLatencyMs": 1,
+        "maxLatencyMs": 10,
+        "dropRate": 0,
+        "duplicateRate": 0
+      },
+      "faults": [
+        {
+          "atMs": 1000,
+          "action": "isolate",
+          "args": {
+            "node": "n4"
+          }
+        },
+        {
+          "atMs": 3000,
+          "action": "heal",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "seed": 42,
+      "target": "target-b",
+      "durationMs": 1587,
+      "nodes": 5,
+      "clients": 4,
+      "keys": 1,
+      "readRatio": 0.5,
+      "readFrom": "any",
+      "opTimeoutMs": 500,
+      "network": {
+        "minLatencyMs": 1,
+        "maxLatencyMs": 10,
+        "dropRate": 0,
+        "duplicateRate": 0
+      },
+      "faults": [
+        {
+          "atMs": 1000,
+          "action": "isolate",
+          "args": {
+            "node": "n4"
+          }
+        }
+      ]
+    }
+  ],
+  "finding": {
+    "experimentId": "39ea2d21",
+    "title": "Stale read from isolated old leader (no read-lease/quorum check)",
+    "anomaly": "p5 read x-\u003e76 from n4 at 1545ms, after write(x,82) completed at 1532ms on the new leader n3. Write 76 was the last value before that, so the read is stale and cannot be linearized.",
+    "causalChain": [
+      "t=206 n4 becomes leader of term 1",
+      "t=1000 n4 isolated from all other nodes",
+      "t=1186-1197 n3 wins election in term 2 on the majority side",
+      "t=1503-1532 write(x,82) commits via n3",
+      "t=1536-1545 read(x) sent to n4, which still believes it leads, and it answers locally with 76 without confirming leadership with a quorum",
+      "result: stale read, not linearizable"
+    ],
+    "spec": {
+      "seed": 42,
+      "target": "target-b",
+      "durationMs": 1587,
+      "nodes": 5,
+      "clients": 4,
+      "keys": 1,
+      "readRatio": 0.5,
+      "readFrom": "any",
+      "opTimeoutMs": 500,
+      "network": {
+        "minLatencyMs": 1,
+        "maxLatencyMs": 10,
+        "dropRate": 0,
+        "duplicateRate": 0
+      },
+      "faults": [
+        {
+          "atMs": 1000,
+          "action": "isolate",
+          "args": {
+            "node": "n4"
+          }
+        }
+      ]
+    },
+    "check": {
+      "verdict": "violation",
+      "key": "x",
+      "linearizedIds": [
+        8,
+        10,
+        12,
+        13,
+        15,
+        14,
+        16,
+        19,
+        17,
+        18,
+        20,
+        23,
+        21,
+        22,
+        24,
+        26,
+        25,
+        27,
+        30,
+        29,
+        28,
+        31,
+        32,
+        33,
+        35,
+        34,
+        36,
+        37,
+        38,
+        39,
+        40,
+        42,
+        41,
+        43,
+        45,
+        44,
+        46,
+        47,
+        48,
+        49,
+        50,
+        54,
+        51,
+        52,
+        55,
+        53,
+        57,
+        56,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63,
+        64,
+        65,
+        66,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        76,
+        75,
+        77,
+        78,
+        79,
+        80,
+        81,
+        83,
+        82,
+        84,
+        86,
+        85,
+        87,
+        89,
+        88,
+        90,
+        93,
+        91,
+        92,
+        94,
+        95,
+        96,
+        97,
+        98,
+        99,
+        100,
+        101,
+        102,
+        103,
+        104,
+        105,
+        106,
+        108,
+        107,
+        109,
+        110,
+        113,
+        112,
+        111,
+        114,
+        115,
+        117,
+        118,
+        116,
+        119,
+        120,
+        121,
+        122,
+        124,
+        123,
+        125,
+        127,
+        128,
+        132,
+        133,
+        134,
+        135,
+        136,
+        137,
+        139
+      ],
+      "offendingIds": [
+        123,
+        133,
+        138
+      ],
+      "illegalIds": [
+        138
+      ],
+      "explanation": "read(x) by p5 returned 76 at 1545 ms, but write(x, 82) by p5 completed at 1532 ms, after write(x, 76) by p0 completed at 979 ms, and no later write set x back to 76."
+    }
+  },
+  "conclusion": null,
+  "revealedBug": "stale leader reads: the leader answers reads from local state without going through the log or confirming it is still leader",
+  "usage": {
+    "inputTokens": 14,
+    "outputTokens": 893,
+    "cacheReadTokens": 24957,
+    "cacheCreationTokens": 3207
+  },
+  "historyHashes": {
+    "25c8b6d0": "27a1941d752163b1",
+    "39ea2d21": "76a256037d24ac50",
+    "59c9a23b": "be535ce161a8dee4",
+    "81aa7166": "319d4c079febaf40"
+  }
+}

@@ -1,1 +1,32 @@
-[]
+[
+  {
+    "id": "target-a-42",
+    "target": "target-a",
+    "steps": 19,
+    "found": false
+  },
+  {
+    "id": "target-b-42",
+    "target": "target-b",
+    "steps": 6,
+    "found": true
+  },
+  {
+    "id": "target-c-42",
+    "target": "target-c",
+    "steps": 5,
+    "found": true
+  },
+  {
+    "id": "target-d-42",
+    "target": "target-d",
+    "steps": 22,
+    "found": false
+  },
+  {
+    "id": "target-e-42",
+    "target": "target-e",
+    "steps": 5,
+    "found": true
+  }
+]
