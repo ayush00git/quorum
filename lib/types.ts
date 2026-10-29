@@ -59,7 +59,10 @@ export interface CheckResult {
   verdict: Verdict;
   key?: string;
   linearizedIds?: number[];
+  /** illegalIds plus the ops they conflict with. */
   offendingIds?: number[];
+  /** Offending ops that cannot follow the longest linearizable prefix. */
+  illegalIds?: number[];
   explanation?: string;
 }
 

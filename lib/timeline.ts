@@ -76,14 +76,17 @@ export function assignLanes(history: readonly Op[]): Map<number, number> {
 
 /**
  * ok: plain outline. fail: did not take effect. info: indeterminate, open ended.
- * offending: in the checker's offending set and could not be linearized.
- * conflicting: in the offending set but linearizable on its own; it is what
- * the offending ops conflict with.
+ * offending: cannot be linearized (illegalIds, or offending but not in
+ * linearizedIds when illegalIds is absent).
+ * conflicting: the rest of the offending set; the ops the illegal ones
+ * conflict with.
  */
 export type BarRole = "ok" | "fail" | "info" | "offending" | "conflicting";
 
 export function opRole(op: Op, check: CheckResult | null): BarRole {
   if (check?.verdict === "violation" && check.offendingIds?.includes(op.id)) {
+    // Prefer the checker's explicit illegal set; older results lack it.
+    if (check.illegalIds) return check.illegalIds.includes(op.id) ? "offending" : "conflicting";
     return check.linearizedIds?.includes(op.id) ? "conflicting" : "offending";
   }
   return op.status;
