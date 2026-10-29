@@ -13,7 +13,7 @@ func i64(v int64) *int64     { return &v }
 func f64(v float64) *float64 { return &v }
 
 // randomFaults builds an aggressive random schedule: partitions, isolation,
-// crashes and restarts, pauses, lossy and duplicating networks.
+// crashes and restarts, pauses, lossy and duplicating networks, clock skew.
 func randomFaults(r *sim.Rand, durationMs int64, n int) []Fault {
 	nodes := NodeIDs(NodeCount)
 	node := func() string { return nodes[r.Intn(len(nodes))] }
@@ -21,7 +21,7 @@ func randomFaults(r *sim.Rand, durationMs int64, n int) []Fault {
 	for i := 0; i < n; i++ {
 		at := r.Range(0, durationMs-1)
 		var f Fault
-		switch r.Intn(9) {
+		switch r.Intn(10) {
 		case 0:
 			perm := append([]string(nil), nodes...)
 			for j := len(perm) - 1; j > 0; j-- {
@@ -45,6 +45,8 @@ func randomFaults(r *sim.Rand, durationMs int64, n int) []Fault {
 				MinLatencyMs: i64(r.Range(0, 5)), MaxLatencyMs: i64(r.Range(10, 60)),
 				DropRate: f64(float64(r.Intn(3)) / 10), DuplicateRate: f64(float64(r.Intn(3)) / 10),
 			}}
+		case 9:
+			f = Fault{Action: ActionSkewClock, Args: FaultArgs{Node: node(), DriftPpm: r.Range(-MaxDriftPpm, MaxDriftPpm)}}
 		}
 		f.AtMs = at
 		faults = append(faults, f)

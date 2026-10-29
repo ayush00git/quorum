@@ -30,7 +30,7 @@ var targets = map[string]Target{
 	"target-c": {Enabled: true, Difficulty: "medium", Bug: "early ack: the leader acknowledges a write once it is in its own log, before majority replication", Flags: Bugs{EarlyAck: true}},
 	"target-d": {Enabled: true, Difficulty: "hard", Bug: "amnesiac voter: votedFor is not persisted, so a restarted node can vote twice in one term", Flags: Bugs{AmnesiacVoter: true}},
 	"target-e": {Enabled: true, Difficulty: "easy", Bug: "follower reads: followers answer reads from their local state machine", Flags: Bugs{FollowerReads: true}},
-	"target-f": {Difficulty: "hard", Bug: "lease reads under clock skew: the leader serves reads under a time-based lease that assumes clocks never drift", Flags: Bugs{LeaseReads: true}},
+	"target-f": {Enabled: true, Difficulty: "hard", Bug: "lease reads under clock skew: the leader serves reads under a time-based lease that assumes clocks never drift", Flags: Bugs{LeaseReads: true}},
 	"target-g": {Difficulty: "very hard", Bug: "previous-term commit: the leader commits earlier-term entries by counting replicas (the Raft paper's Figure 8 bug)", Flags: Bugs{PrevTermCommit: true}},
 }
 

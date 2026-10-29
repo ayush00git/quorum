@@ -31,10 +31,16 @@ func (l *leaseState) ack(from string, round int, n *Node) {
 	}
 }
 
-func (l *leaseState) valid(n *Node) bool { return n.env.Now() < l.expires }
+// valid also requires an entry of the current term to be committed, so a
+// new leader never serves reads from a state machine missing entries that
+// earlier leaders committed.
+func (l *leaseState) valid(n *Node) bool {
+	return n.env.Now() < l.expires && n.disk.Log[n.commit].Term == n.term()
+}
 
-// sticky reports whether a lease-aware follower must refuse to vote because
-// it heard from a leader too recently.
+// sticky reports whether a lease-aware node must refuse to vote because it
+// heard from a leader too recently. A restarted node counts as having just
+// heard from one, since it cannot know whether it acked a lease round.
 func (n *Node) sticky() bool {
-	return n.cfg.Bugs.LeaseReads && n.heardLeaderAt > 0 && n.env.Now() < n.heardLeaderAt+n.cfg.ElectionMinMs
+	return n.cfg.Bugs.LeaseReads && n.env.Now() < n.heardLeaderAt+n.cfg.ElectionMinMs
 }

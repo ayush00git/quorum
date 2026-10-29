@@ -73,6 +73,25 @@ func amnesiaSchedule(t testing.TB, target string, seed int64, voter string, minL
 	return s
 }
 
+// leaseSchedule slows the leader's clock and speeds up everyone else's, then
+// isolates the leader. Its lease, measured on its slow clock, outlives the
+// followers' patience, measured on their fast clocks. A short op timeout
+// lets clients move on to the new leader while the old lease still holds.
+func leaseSchedule(t testing.TB, target string, seed int64) Spec {
+	l := leaderOf(t, target, seed, 1000)
+	s := Spec{Target: target, Seed: seed, DurationMs: 3000, ReadFrom: "any", OpTimeoutMs: 100, Clients: 6, Faults: []Fault{
+		{AtMs: 500, Action: ActionSkewClock, Args: FaultArgs{Node: l, DriftPpm: -500000}},
+		{AtMs: 1000, Action: ActionIsolate, Args: FaultArgs{Node: l}},
+		{AtMs: 2000, Action: ActionHeal},
+	}}
+	for _, n := range NodeIDs(NodeCount) {
+		if n != l {
+			s.Faults = append(s.Faults, Fault{AtMs: 500, Action: ActionSkewClock, Args: FaultArgs{Node: n, DriftPpm: 500000}})
+		}
+	}
+	return s
+}
+
 // TestCanaries checks that every bug target has a hand-written schedule
 // that produces a checker-confirmed violation, and that the same schedule
 // is linearizable on the control.
@@ -96,6 +115,9 @@ func TestCanaries(t *testing.T) {
 		}},
 		{"amnesiac voter", func(b raft.Bugs) bool { return b.AmnesiacVoter }, func(t testing.TB, target string) Spec {
 			return amnesiaSchedule(t, target, 162, "n5", 38, 92, 15)
+		}},
+		{"lease reads under skew", func(b raft.Bugs) bool { return b.LeaseReads }, func(t testing.TB, target string) Spec {
+			return leaseSchedule(t, target, 5)
 		}},
 	}
 	for _, tc := range cases {
@@ -122,6 +144,27 @@ func TestCanaries(t *testing.T) {
 				t.Fatalf("control verdict %s on the canary schedule: %s", ctl.Check.Verdict, ctl.Check.Explanation)
 			}
 		})
+	}
+}
+
+// The lease bug must need clock skew: the same schedule without skewClock
+// faults is linearizable.
+func TestLeaseReadsSafeWithoutSkew(t *testing.T) {
+	target := bugTarget(t, func(b raft.Bugs) bool { return b.LeaseReads })
+	s := leaseSchedule(t, target, 5)
+	var faults []Fault
+	for _, f := range s.Faults {
+		if f.Action != ActionSkewClock {
+			faults = append(faults, f)
+		}
+	}
+	s.Faults = faults
+	res, err := Run(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Check.Verdict != checker.VerdictOK {
+		t.Fatalf("verdict %s without skew: %s", res.Check.Verdict, res.Check.Explanation)
 	}
 }
 

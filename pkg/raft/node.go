@@ -85,7 +85,12 @@ func newNode(env *sim.Env, cfg Config) *Node {
 }
 
 // OnStart begins as a follower waiting for a leader.
-func (n *Node) OnStart() { n.resetElectionDeadline() }
+func (n *Node) OnStart() {
+	if n.cfg.Bugs.LeaseReads {
+		n.heardLeaderAt = n.env.Now()
+	}
+	n.resetElectionDeadline()
+}
 
 // OnMessage dispatches an incoming message.
 func (n *Node) OnMessage(from string, msg any) {
