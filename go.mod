@@ -2,7 +2,10 @@ module github.com/ayush00git/quorum
 
 go 1.26
 
-require github.com/anthropics/anthropic-sdk-go/v2 v2.4.0
+require (
+	github.com/anishathalye/porcupine v1.3.1
+	github.com/anthropics/anthropic-sdk-go/v2 v2.4.0
+)
 
 require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
@@ -22,4 +25,9 @@ require (
 	go.opentelemetry.io/otel/trace v1.33.0 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
 	golang.org/x/sync v0.16.0 // indirect
+)
+
+ignore (
+	./.next
+	./node_modules
 )
