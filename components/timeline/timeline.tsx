@@ -200,9 +200,11 @@ export function Timeline({ result, cursorMs, onCursorChange, interactive = true 
                 return (
                   <g key={t}>
                     <line x1={x} x2={x} y1={AXIS_H - 4} y2={height} className="stroke-border" />
-                    <text x={x + 3} y={11} className="fill-subtle text-[10px] tabular-nums">
-                      {formatMs(t)}
-                    </text>
+                    {x + 3 + labelWidth(formatMs(t)) <= plotW + RIGHT_PAD ? (
+                      <text x={x + 3} y={11} className="fill-subtle text-[10px] tabular-nums">
+                        {formatMs(t)}
+                      </text>
+                    ) : null}
                   </g>
                 );
               })}

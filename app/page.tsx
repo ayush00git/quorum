@@ -33,7 +33,7 @@ export default function Landing() {
       <main>
         <section className="border-b border-border">
           <div className="mx-auto grid max-w-6xl gap-10 px-4 pt-16 pb-12 sm:px-6 sm:pt-24 lg:grid-cols-12">
-            <div className="flex flex-col gap-6 lg:col-span-8">
+            <div className="flex min-w-0 flex-col gap-6 lg:col-span-8">
               <p className="label">Jepsen-style testing · Claude as the adversary</p>
               <h1 className="max-w-3xl text-4xl leading-[1.04] font-semibold tracking-[-0.03em] text-balance sm:text-5xl lg:text-6xl">
                 An AI that tries to break your distributed system.
@@ -94,14 +94,14 @@ export default function Landing() {
 
         <section aria-labelledby="targets" className="border-b border-border">
           <div className="mx-auto grid max-w-6xl gap-8 px-4 py-16 sm:px-6 lg:grid-cols-12">
-            <div className="flex flex-col gap-3 lg:col-span-4">
+            <div className="flex min-w-0 flex-col gap-3 lg:col-span-4">
               <h2 id="targets" className="label">Targets</h2>
               <p className="text-[13px] leading-5 text-muted">
                 Each target is the same Raft implementation with a different planted bug, or none at all. Claude
                 only sees the codename. The bug is revealed after the run ends.
               </p>
             </div>
-            <div className="lg:col-span-8">
+            <div className="min-w-0 lg:col-span-8">
               <TargetsLadder />
             </div>
           </div>

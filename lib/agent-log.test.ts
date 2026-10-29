@@ -56,6 +56,14 @@ describe("buildLog", () => {
   });
 });
 
+it("treats text before a shrink as a lesson, not a hypothesis", () => {
+  const log = buildLog([
+    steps[0]!,
+    { assistant: [{ type: "text", text: "Violation. Shrinking." }, { type: "tool_use", id: "t9", name: "shrink", input: {} }], toolResults: [], experiments: [] },
+  ]);
+  expect(log.filter((e) => e.kind === "text").map((e) => e.label)).toEqual(["Hypothesis", "Learned"]);
+});
+
 describe("collectExperiments", () => {
   it("dedupes by id in first-seen order", () => {
     const s: RecordedStep[] = [

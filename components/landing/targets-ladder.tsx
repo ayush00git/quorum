@@ -56,7 +56,7 @@ export function TargetsLadder() {
   }
 
   return (
-    <div className="overflow-x-auto">
+    <div className="relative overflow-x-auto">
       <table className="w-full min-w-[520px] border-collapse text-[13px]">
         <thead>
           <tr className="border-b border-border-strong text-left">

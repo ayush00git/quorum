@@ -45,11 +45,11 @@ export type LogEntry =
     };
 
 /**
- * Text in a step that launches an experiment is the hypothesis for it; text
- * in the step right after one is what was learned from it.
+ * Text in a step that launches a new experiment is the hypothesis for it;
+ * text in the step right after an experiment or shrink is what was learned.
  */
 function labelFor(step: RecordedStep, prev: RecordedStep | undefined): TextLabel {
-  const launches = step.assistant.some((b) => isToolUse(b) && EXPERIMENT_TOOLS.has(b.name));
+  const launches = step.assistant.some((b) => isToolUse(b) && b.name === "run_experiment");
   if (launches) return "Hypothesis";
   const followsExperiment = prev?.assistant.some(
     (b) => isToolUse(b) && EXPERIMENT_TOOLS.has(b.name),
