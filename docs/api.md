@@ -76,6 +76,7 @@ Request:
 {
   "target": "target-c",
   "maxSteps": 30,
+  "seed": 42,
   "messages": [ { "role": "user", "content": [ ... ] } ],
   "accessCode": "optional"
 }
@@ -85,7 +86,13 @@ Request:
   first request sends `[]`; the server injects its own kickoff user message,
   and returns it as `kickoff` so the browser can prepend it.
 - Roles must be `user` or `assistant`; at most `2 * maxSteps + 2` messages.
-- `maxSteps` is optional, clamped to [10, server `maxSteps`].
+- Roles alternate starting with `user`, and the last message must be a
+  `user` message. Every content block must be an object with a `type`.
+- `maxSteps` is optional, clamped to [10, server `maxSteps`]. A request whose
+  history already holds `maxSteps` assistant messages is rejected (400).
+- `seed` is optional. When present, the kickoff message asks the agent to use
+  it as the base seed for its experiments. It has no other effect.
+- The client never chooses the model, system prompt, tools or token limits.
 
 Response:
 
@@ -93,7 +100,7 @@ Response:
 {
   "kickoff": { "role": "user", "content": [ ... ] },
   "assistant": [ /* Anthropic content blocks: text, tool_use */ ],
-  "toolResults": [ /* tool_result blocks, send back verbatim as a user message */ ],
+  "toolResults": [ /* tool_result blocks (or one text nudge), send back verbatim as a user message */ ],
   "experiments": [
     { "id": "a1b2c3d4", "spec": { }, "verdict": "violation", "ops": 120, "faults": 3, "durationMs": 3000, "shrunkFrom": "" }
   ],
@@ -118,7 +125,25 @@ Response:
 step budget runs out (then `conclusion` explains that). The browser appends
 `{ role: "assistant", content: assistant }` and, if `toolResults` is
 non-empty, `{ role: "user", content: toolResults }`, then calls again until
-`done`.
+`done`. `assistant`, `toolResults` and `experiments` are always arrays, never
+`null`. `assistant` holds the content blocks exactly as Claude returned them,
+including `thinking` blocks, which must be sent back unchanged.
+
+Tool results:
+
+- Each `tool_result` has string `content`, ending in
+  `budget: {"stepsUsed":N,"stepsLeft":M}`. Failed calls (invalid input, a
+  rejected `report_finding`) have `is_error: true` and content starting with
+  `error: `; the run continues.
+- `run_experiment` and `shrink` results contain the experiment id as
+  `experiment <id>:` (the summary's first line). A `shrink` result starts with
+  `shrunk <sourceId> to experiment <id>`. The UI matches log entries to
+  `experiments[]` by that id.
+- `inspect_history` lines mark checker-flagged ops: `*` cannot be linearized,
+  `!` conflicts with an op that cannot.
+- If Claude ends a turn without calling a tool and the run is not done,
+  `toolResults` is a single `text` block nudging it to continue. The browser
+  appends it as the next user message like any tool results.
 
 ## Recorded run file (`public/runs/<target>-<seed>.json`)
 
