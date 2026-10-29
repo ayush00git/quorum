@@ -102,6 +102,12 @@ describe("opRole", () => {
     expect(opRole(op({ id: 1, process: 1 }), violation)).toBe("ok");
   });
 
+  it("uses illegalIds for the inverted style when present", () => {
+    const withIllegal: CheckResult = { ...violation, linearizedIds: [1], illegalIds: [2] };
+    expect(opRole(op({ id: 2, process: 1 }), withIllegal)).toBe("offending");
+    expect(opRole(op({ id: 3, process: 1 }), withIllegal)).toBe("conflicting");
+  });
+
   it("falls back to the op status", () => {
     expect(opRole(op({ id: 4, process: 1, status: "info", completeAt: null }), null)).toBe("info");
     expect(opRole(op({ id: 5, process: 1, status: "fail" }), { verdict: "ok" })).toBe("fail");

@@ -33,6 +33,8 @@ export type TextLabel = "Hypothesis" | "Learned" | "Note";
 
 export type LogEntry =
   | { kind: "text"; key: string; step: number; label: TextLabel; text: string }
+  /** Server reminder sent when Claude ends a turn without calling a tool. */
+  | { kind: "nudge"; key: string; step: number; text: string }
   | {
       kind: "tool";
       key: string;
@@ -97,6 +99,12 @@ export function buildLog(steps: readonly RecordedStep[]): LogEntry[] {
           isError: res?.is_error === true,
           experiment: experimentFor(b, result, step),
         });
+      }
+    });
+
+    step.toolResults.forEach((b, i) => {
+      if (isText(b) && b.text.trim()) {
+        entries.push({ kind: "nudge", key: `${s}:r${i}`, step: s, text: b.text.trim() });
       }
     });
   });
