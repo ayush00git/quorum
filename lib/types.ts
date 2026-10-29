@@ -221,6 +221,8 @@ export interface Message {
 export interface AgentRequest {
   target: string;
   maxSteps?: number;
+  /** Base seed the kickoff suggests to the agent for its experiments. */
+  seed?: number;
   messages: Message[];
   accessCode?: string;
 }
