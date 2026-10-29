@@ -108,7 +108,7 @@ The checker runs with a timeout, and a timeout yields `unknown`, never a hang. O
 
 The loop makes **one Claude call per HTTP request, and tools run in Go**:
 
-1. The browser holds the Messages API `messages` array and POSTs `{ target, maxSteps, messages }` to `/api/agent`.
+1. The browser holds the Messages API `messages` array and POSTs `{ target, maxSteps, seed, messages }` to `/api/agent`.
 2. Go calls Claude with a server-owned system prompt, tools, model and token limit. The client cannot choose any of these.
 3. Any `tool_use` blocks are executed in-process. The response carries the assistant blocks, the tool results, summaries of the experiments run in this step, token usage and a `done` flag.
 4. The browser appends the assistant turn and the tool results, renders them, and calls again until `done`.
@@ -141,12 +141,16 @@ npm install
 make dev                # Go dev server on 127.0.0.1:8080 + next dev on :3000
 ```
 
+`make dev` exports the variables in `.env` (if it exists) into the environment, builds `bin/devserver`, and runs it alongside `npm run dev`. Stopping either stops both. `make devserver` runs only the Go server.
+
 Open http://localhost:3000. The landing page and replays work without an API key, since experiments need only the simulator. The live lab needs `ANTHROPIC_API_KEY`.
 
 Other commands:
 
 | command | what it does |
 |---|---|
+| `make check` | every gate: gofmt, `go vet`, race tests, vitest, lint, typecheck, `next build` |
+| `make test` | `go test -race ./...`, then `npm test` |
 | `go vet ./...` | Go static checks |
 | `go test -race ./...` | simulator, Raft safety fuzz, checker, shrinker, agent and handler tests |
 | `npm run build` | production Next.js build (type-checked) |
@@ -171,9 +175,16 @@ Record a full session headlessly with the same agent code the lab uses:
 
 ```sh
 go run ./cmd/record -target target-c -seed 42
-# or
-make record
+# or, with .env loaded
+make record TARGET=target-c SEED=42
 ```
+
+| flag | make variable | default | meaning |
+|---|---|---|---|
+| `-target` | `TARGET` | none, required | target codename |
+| `-seed` | `SEED` | `42` | base seed suggested to the agent; also names the run |
+| `-steps` | `STEPS` | `AGENT_MAX_STEPS` | step budget |
+| `-out` | n/a | `public/runs` | output directory |
 
 This writes `public/runs/<target>-<seed>.json` in the format described in [`docs/api.md`](docs/api.md). Add an entry to `public/runs/index.json` to list it on `/replay` and in the landing page's targets table:
 
@@ -203,7 +214,7 @@ Replay plays Claude's messages back at reading pace and re-executes every record
 - **Null-slice normalization.** Go marshals nil slices as `null`, for example `faults`, `history`, `events`, `stats.leaders` and the agent's `assistant`, `toolResults` and `experiments`. `lib/api.ts` coerces these to `[]` at the boundary, so every component can rely on arrays and `lib/types.ts` can mirror the Go structs without `| null` everywhere.
 - **Pure, tested layout math.** Timeline geometry (viewport zoom and pan, ticks, lanes, bars, fault markers) and cluster state at a point in time are plain functions in `lib/`, unit-tested with vitest and shared by the lab, the replay and the landing hero.
 - **The client caches experiment results.** Because results are deterministic, the browser caches each fetched result by experiment id. Lab selection, replay verification and export share that cache.
-- **The seed in the lab names the exported file.** The agent API has no seed field yet, so the lab's seed only names exported runs (`<target>-<seed>.json`).
+- **The seed is a suggestion, not a control.** The lab sends its seed with every `/api/agent` request, and `cmd/record` passes `-seed` the same way. The server only mentions it in the kickoff message as the base seed Claude should use for its experiments, so runs stay comparable without taking experiment design away from the agent. It also names the run file (`<target>-<seed>.json`). Replays never call the agent, so they do not send it.
 
 ## Repository layout
 
