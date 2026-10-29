@@ -255,6 +255,10 @@ export interface Finding {
 export interface AgentResponse {
   kickoff?: Message;
   assistant: ContentBlock[];
+  /**
+   * tool_result blocks, or a single text nudge when Claude ended its turn
+   * without a tool call. Either way it is sent back verbatim as a user message.
+   */
   toolResults: ContentBlock[];
   experiments: ExperimentSummary[];
   usage: Usage;

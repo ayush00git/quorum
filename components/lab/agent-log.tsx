@@ -120,7 +120,13 @@ export function AgentLog({
       ) : (
         <ol className="flex flex-col gap-5 p-3" aria-live="polite" aria-relevant="additions">
           {entries.map((e) =>
-            e.kind === "text" ? (
+            e.kind === "nudge" ? (
+              <li key={e.key} className="flex items-baseline gap-2" title={e.text}>
+                <StepNo step={e.step} />
+                <span className="font-mono text-2xs uppercase tracking-wider text-subtle">nudge</span>
+                <span className="min-w-0 truncate text-xs text-subtle">{e.text}</span>
+              </li>
+            ) : e.kind === "text" ? (
               <li key={e.key} className="flex flex-col gap-1.5">
                 <div className="flex items-center gap-2">
                   <StepNo step={e.step} />

@@ -64,6 +64,18 @@ it("treats text before a shrink as a lesson, not a hypothesis", () => {
   expect(log.filter((e) => e.kind === "text").map((e) => e.label)).toEqual(["Hypothesis", "Learned"]);
 });
 
+it("renders a text nudge in toolResults as a nudge entry", () => {
+  const log = buildLog([
+    {
+      assistant: [{ type: "text", text: "Thinking about partitions." }],
+      toolResults: [{ type: "text", text: "Call a tool or conclude." }],
+      experiments: [],
+    },
+  ]);
+  expect(log.map((e) => e.kind)).toEqual(["text", "nudge"]);
+  expect(log[1]).toMatchObject({ kind: "nudge", text: "Call a tool or conclude." });
+});
+
 describe("collectExperiments", () => {
   it("dedupes by id in first-seen order", () => {
     const s: RecordedStep[] = [
