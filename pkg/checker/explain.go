@@ -62,8 +62,14 @@ func explainViolation(kh keyHistory, info porcupine.LinearizationInfo) CheckResu
 	} else {
 		res.Explanation = fmt.Sprintf("the history of key %s cannot be linearized after %d operations", kh.key, len(prefix))
 	}
+	// Conflicting ops are reported only if they are in the linearized
+	// prefix, so "offending and not linearized" always means illegal.
 	for _, op := range conflicts {
-		offending[op.ID] = true
+		for _, i := range prefix {
+			if kh.ops[i].ID == op.ID {
+				offending[op.ID] = true
+			}
+		}
 	}
 	for id := range offending {
 		res.OffendingIDs = append(res.OffendingIDs, id)
