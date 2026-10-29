@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "functions": {
+    "api/agent.go": { "maxDuration": 60 },
+    "api/experiment.go": { "maxDuration": 30 },
+    "api/meta.go": { "maxDuration": 10 }
+  }
+}

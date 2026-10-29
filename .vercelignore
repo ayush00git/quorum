@@ -1,0 +1,13 @@
+# Go tests are not functions
+api/*_test.go
+**/*_test.go
+
+# local only
+.env
+.env.*
+.worktrees/
+brag-output/
+bin/
+cmd/
+node_modules/
+.next/

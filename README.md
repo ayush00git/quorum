@@ -2,6 +2,8 @@
 
 # Quorum
 
+**Live demo:** https://quorum-weld-nu.vercel.app
+
 Quorum is a Jepsen-style lab where Claude plays the adversary. It attacks a simulated five-node Raft key-value store with partitions, crashes, pauses and network faults. A real linearizability checker decides whether it won. Some targets have a planted consistency bug and one is correct, and Claude doesn't know which is which.
 
 ![Landing page with a recorded violation](docs/screenshots/landing.png)
