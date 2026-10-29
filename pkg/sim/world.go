@@ -85,7 +85,11 @@ func (w *World) add(id string, f Factory, node bool) {
 	if _, dup := w.actors[id]; dup {
 		panic(fmt.Sprintf("sim: duplicate actor %q", id))
 	}
-	a := &actor{id: id, node: node, factory: f, rand: w.root.Fork("elections/" + id)}
+	stream := "workload/" + id
+	if node {
+		stream = "elections/" + id
+	}
+	a := &actor{id: id, node: node, factory: f, rand: w.root.Fork(stream)}
 	w.actors[id] = a
 	w.order = append(w.order, a)
 	w.At(0, func() { w.boot(a) })

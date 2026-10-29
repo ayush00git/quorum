@@ -13,8 +13,8 @@ func (e *Env) ID() string { return e.a.id }
 // Now is this process's local clock, which drifts under skewClock.
 func (e *Env) Now() int64 { return e.a.clock.local(e.w.now) }
 
-// Rand is this process's private stream ("elections/<id>"). It continues
-// across restarts.
+// Rand is this process's private stream ("elections/<id>" for nodes,
+// "workload/<id>" for clients). It continues across restarts.
 func (e *Env) Rand() *Rand { return e.a.rand }
 
 // Disk is storage that survives crashes.
