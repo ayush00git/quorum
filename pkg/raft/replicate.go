@@ -87,21 +87,25 @@ func (n *Node) onAppendReply(from string, m AppendReply) {
 	if n.role != leader || m.Term != n.term() {
 		return
 	}
+	// Only replies that carry new information trigger another send, so
+	// duplicated or stale replies cannot multiply traffic; heartbeats retry
+	// anything else.
 	if m.Success {
 		n.lease.ack(from, m.Round, n)
-		if m.Match > n.match[from] {
-			n.match[from] = m.Match
+		if m.Match <= n.match[from] {
+			return
 		}
-		n.next[from] = max(n.next[from], n.match[from]+1)
+		n.match[from] = m.Match
+		n.next[from] = max(n.next[from], m.Match+1)
 		n.advanceCommit()
 		if n.next[from] <= n.lastIndex() {
 			n.sendAppend(from)
 		}
 		return
 	}
-	next := max(m.Conflict, 1)
-	if next <= n.match[from] {
-		next = n.match[from] + 1
+	next := max(m.Conflict, n.match[from]+1, 1)
+	if next >= n.next[from] {
+		return
 	}
 	n.next[from] = next
 	n.sendAppend(from)

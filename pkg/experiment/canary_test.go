@@ -54,20 +54,20 @@ func isolateLeader(t testing.TB, target string, seed int64) Spec {
 
 // amnesiaSchedule crashes and immediately restarts the leader to force an
 // election, slows the network so vote requests linger in flight, and flaps
-// one voter through the election so it forgets whom it voted for.
-func amnesiaSchedule(t testing.TB, target string) Spec {
-	const seed = 37
+// one voter through the election so it forgets whom it voted for. Two
+// leaders then win the same term and commit different entries.
+func amnesiaSchedule(t testing.TB, target string, seed int64, voter string, minLat, maxLat, stepMs int64) Spec {
 	l := leaderOf(t, target, seed, 999)
 	s := Spec{Target: target, Seed: seed, DurationMs: 3000, Faults: []Fault{
-		{AtMs: 990, Action: ActionSetNetwork, Args: FaultArgs{MinLatencyMs: i64(21), MaxLatencyMs: i64(136)}},
+		{AtMs: 990, Action: ActionSetNetwork, Args: FaultArgs{MinLatencyMs: i64(minLat), MaxLatencyMs: i64(maxLat)}},
 		{AtMs: 1000, Action: ActionCrash, Args: FaultArgs{Node: l}},
 		{AtMs: 1005, Action: ActionRestart, Args: FaultArgs{Node: l}},
 	}}
 	for k := int64(0); k < 13; k++ {
-		at := 1180 + k*15
+		at := 1180 + k*stepMs
 		s.Faults = append(s.Faults,
-			Fault{AtMs: at, Action: ActionCrash, Args: FaultArgs{Node: "n4"}},
-			Fault{AtMs: at + 1, Action: ActionRestart, Args: FaultArgs{Node: "n4"}})
+			Fault{AtMs: at, Action: ActionCrash, Args: FaultArgs{Node: voter}},
+			Fault{AtMs: at + 1, Action: ActionRestart, Args: FaultArgs{Node: voter}})
 	}
 	s.Faults = append(s.Faults, Fault{AtMs: 1600, Action: ActionSetNetwork, Args: FaultArgs{MinLatencyMs: i64(1), MaxLatencyMs: i64(10)}})
 	return s
@@ -94,7 +94,9 @@ func TestCanaries(t *testing.T) {
 		{"early ack", func(b raft.Bugs) bool { return b.EarlyAck }, func(t testing.TB, target string) Spec {
 			return isolateLeader(t, target, 1)
 		}},
-		{"amnesiac voter", func(b raft.Bugs) bool { return b.AmnesiacVoter }, amnesiaSchedule},
+		{"amnesiac voter", func(b raft.Bugs) bool { return b.AmnesiacVoter }, func(t testing.TB, target string) Spec {
+			return amnesiaSchedule(t, target, 162, "n5", 38, 92, 15)
+		}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -110,6 +112,7 @@ func TestCanaries(t *testing.T) {
 			if res.Check.Explanation == "" || len(res.Check.IllegalIDs) == 0 {
 				t.Fatalf("violation without explanation or illegal ops: %+v", res.Check)
 			}
+			checkIDSemantics(t, res.Check)
 			s.Target = "target-a"
 			ctl, err := Run(s)
 			if err != nil {
@@ -119,5 +122,26 @@ func TestCanaries(t *testing.T) {
 				t.Fatalf("control verdict %s on the canary schedule: %s", ctl.Check.Verdict, ctl.Check.Explanation)
 			}
 		})
+	}
+}
+
+// checkIDSemantics enforces the UI contract: an offending op outside the
+// linearized prefix is exactly an illegal op; one inside it is conflicting.
+func checkIDSemantics(t testing.TB, c checker.CheckResult) {
+	t.Helper()
+	lin, illegal := map[int]bool{}, map[int]bool{}
+	for _, id := range c.LinearizedIDs {
+		lin[id] = true
+	}
+	for _, id := range c.IllegalIDs {
+		illegal[id] = true
+		if lin[id] {
+			t.Errorf("illegal op %d is in linearizedIds", id)
+		}
+	}
+	for _, id := range c.OffendingIDs {
+		if !lin[id] && !illegal[id] {
+			t.Errorf("offending op %d is neither linearized (conflicting) nor illegal", id)
+		}
 	}
 }
